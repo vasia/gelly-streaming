@@ -4,6 +4,8 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.operators.JoinOperator;
+import org.apache.flink.api.java.operators.Keys;
 import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
@@ -54,27 +56,27 @@ public class GellyTriangleCount {
 
 		Graph<Long, Long, NullValue> graph = Graph.fromDataSet(vertices, edges, env);
 
-		DataSet<Tuple3<Long, Long, Long>> triads = graph
-				.getEdges()
-				.groupBy(0)
-				.reduceGroup(new TriadGroupReducer());
 
 		graph.getEdges()
-				.join(triads)
-				.where(new EdgeKeySelector()) // Note: .where(0, 1) fails for unknown reasons
-				.equalTo(new TriadKeySelector()) // Note: .equalTo(1, 2) does not fail, however
-				.map(new CountMapper()).sum(0).print();
-				// .print();
+				.join(graph.getEdges()
+					.groupBy(0)
+					.reduceGroup(new EdgeCandidateReducer()))
+				.where(new EdgeKeySelector())
+				.equalTo(new EdgeKeySelector())
+				.map(new EdgeCandidateCountMapper())
+				.sum(0)
+				.print();
+
 
 		env.execute("Triangle count");
 	}
 
-	private static final class TriadGroupReducer
-			implements GroupReduceFunction<Edge<Long, NullValue>, Tuple3<Long, Long, Long>> {
+	private static final class EdgeCandidateReducer
+			implements GroupReduceFunction<Edge<Long, NullValue>, Edge<Long, NullValue>> {
 
 		@Override
 		public void reduce(Iterable<Edge<Long, NullValue>> iterable,
-				Collector<Tuple3<Long, Long, Long>> out) throws Exception {
+				Collector<Edge<Long, NullValue>> out) throws Exception {
 
 			HashSet<Long> neighbors = new HashSet<Long>();
 			Long sourceVertex = null;
@@ -96,9 +98,17 @@ public class GellyTriangleCount {
 						continue;
 					}
 
-					out.collect(new Tuple3<Long, Long, Long>(sourceVertex, vertexA, vertexB));
+					out.collect(new Edge<Long, NullValue>(vertexA, vertexB, NullValue.getInstance()));
 				}
 			}
+		}
+	}
+
+	private static final class EdgeCandidateCountMapper
+			implements MapFunction<Tuple2<Edge<Long, NullValue>, Edge<Long, NullValue>>, Tuple1<Long>> {
+		@Override
+		public Tuple1<Long> map(Tuple2<Edge<Long, NullValue>, Edge<Long, NullValue>> input) throws Exception {
+			return new Tuple1<Long>(1L);
 		}
 	}
 
@@ -106,22 +116,6 @@ public class GellyTriangleCount {
 		@Override
 		public Tuple2<Long, Long> getKey(Edge<Long, NullValue> edge) throws Exception {
 			return new Tuple2<Long, Long>(edge.getSource(), edge.getTarget());
-		}
-	}
-
-	private static final class TriadKeySelector implements KeySelector<Tuple3<Long, Long, Long>, Tuple2<Long, Long>> {
-		@Override
-		public Tuple2<Long, Long> getKey(Tuple3<Long, Long, Long> triad) throws Exception {
-			return new Tuple2<Long, Long>(triad.f1, triad.f2);
-		}
-	}
-
-	private static final class CountMapper
-			implements MapFunction<Tuple2<Edge<Long, NullValue>, Tuple3<Long, Long, Long>>, Tuple1<Long>> {
-		@Override
-		public Tuple1<Long> map(Tuple2<Edge<Long, NullValue>,
-				Tuple3<Long, Long, Long>> input) throws Exception {
-			return new Tuple1<Long>(1L);
 		}
 	}
 

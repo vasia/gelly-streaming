@@ -1,31 +1,23 @@
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.functions.RichMapFunction;
-import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.runtime.plugable.SerializationDelegate;
 import org.apache.flink.streaming.api.collector.OutputSelector;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.IterativeDataStream;
 import org.apache.flink.streaming.api.datastream.SplitDataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.streamrecord.StreamRecord;
-import org.apache.flink.streaming.partitioner.DistributePartitioner;
-import org.apache.flink.streaming.partitioner.StreamPartitioner;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
-import org.jboss.netty.util.internal.ConcurrentHashMap;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class StreamTriangleCount {
 
-	public static final long MAX_ITERATION = 10000;
+	public static final long MAX_ITERATION = 5000;
 
 	// We assume that we know all vertices in advance
 	public static final ArrayList<Long> vertices = new ArrayList<>();
@@ -57,7 +49,7 @@ public class StreamTriangleCount {
 						}
 
 						out.collect(new Triplet<>(src, NullValue.getInstance(), trg));
-						out.collect(new Triplet<>(trg, NullValue.getInstance(), src));
+						// out.collect(new Triplet<>(trg, NullValue.getInstance(), src));
 					}
 				});
 
@@ -125,13 +117,14 @@ public class StreamTriangleCount {
 		public Tuple3<Triplet<Long, NullValue>, Integer, Integer>
 				map(Tuple3<Triplet<Long, NullValue>, Integer, Integer> tripletWithValue) throws Exception {
 
-			System.out.println(tripletWithValue.f1);
-
 			Triplet<Long, NullValue> triplet = tripletWithValue.f0;
 			int sequenceNumber = tripletWithValue.f1;
 			SampleTriangleState state;
 
 			if (states.get(sequenceNumber) == null) {
+
+				System.out.println("Creating state for seq " + sequenceNumber);
+
 				state = new SampleTriangleState();
 				states.add(sequenceNumber, state);
 			} else {
@@ -160,11 +153,15 @@ public class StreamTriangleCount {
 			}
 
 			// Check if any of the two remaining edges in the candidate has been found
-			if (triplet.getSrcVertexValue() == state.srcVertex && triplet.getTrgVertexValue() == state.thirdVertex) {
+			if ((triplet.getSrcVertexValue() == state.srcVertex && triplet.getTrgVertexValue() == state.thirdVertex)
+					|| (triplet.getSrcVertexValue() == state.thirdVertex
+					&& triplet.getTrgVertexValue() == state.srcVertex)){
 				state.srcEdgeFound = true;
 			}
 
-			if (triplet.getSrcVertexValue() == state.trgVertex && triplet.getTrgVertexValue() == state.thirdVertex) {
+			if ((triplet.getSrcVertexValue() == state.trgVertex && triplet.getTrgVertexValue() == state.thirdVertex)
+					|| (triplet.getSrcVertexValue() == state.thirdVertex
+					&& triplet.getTrgVertexValue() == state.trgVertex)){
 				state.trgEdgeFound = true;
 			}
 
@@ -233,7 +230,7 @@ public class StreamTriangleCount {
 
 	private static final class Coin {
 		public static boolean flip(int sides) {
-			return (Math.random() * sides < 1);
+			return (Math.random() * (sides) < 1);
 		}
 	}
 

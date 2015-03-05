@@ -14,6 +14,7 @@ import org.apache.flink.util.Collector;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class StreamTriangleCount {
 
@@ -21,6 +22,9 @@ public class StreamTriangleCount {
 
 	// We assume that we know all vertices in advance
 	public static final ArrayList<Long> vertices = new ArrayList<>();
+
+	// TODO: purge old state?
+	public static ConcurrentHashMap<Integer, SampleTriangleState> states;
 
 	public StreamTriangleCount() throws Exception {
 
@@ -102,15 +106,8 @@ public class StreamTriangleCount {
 			extends RichMapFunction<Tuple3<Triplet<Long, NullValue>, Integer, Integer>,
 			Tuple3<Triplet<Long, NullValue>, Integer, Integer>> {
 
-		// TODO: purge old state?
-		private List<SampleTriangleState> states;
-
 		public SampleTriangleInstance() {
-			states = new ArrayList<>();
-
-			for (int i = 0; i < MAX_ITERATION; ++i) {
-				states.add(null);
-			}
+			states = new ConcurrentHashMap<Integer, SampleTriangleState>();
 		}
 
 		@Override
@@ -121,12 +118,11 @@ public class StreamTriangleCount {
 			int sequenceNumber = tripletWithValue.f1;
 			SampleTriangleState state;
 
-			if (states.get(sequenceNumber) == null) {
-
-				System.out.println("Creating state for seq " + sequenceNumber);
+			if (!states.containsKey(sequenceNumber)) {
+				// System.out.println(getRuntimeContext().getIndexOfThisSubtask() + "> Creating state for " + sequenceNumber);
 
 				state = new SampleTriangleState();
-				states.add(sequenceNumber, state);
+				states.put(sequenceNumber, state);
 			} else {
 				state = states.get(sequenceNumber);
 			}

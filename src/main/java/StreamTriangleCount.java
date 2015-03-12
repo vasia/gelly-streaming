@@ -32,8 +32,8 @@ public class StreamTriangleCount {
 
 		// A random graph I generated, details:
 		//   - 100 vertices
-		//   - 1052 edges
-		//   - 1876 triangles
+		//   - 954 edges
+		//   - 884 triangles
 		DataStream<Triplet<Long, NullValue>> triplets = env.readTextFile("random_graph.txt")
 				.flatMap(new FlatMapFunction<String, Triplet<Long, NullValue>>() {
 					@Override
@@ -90,7 +90,7 @@ public class StreamTriangleCount {
 		}).sum(1).map(new MapFunction<Tuple2<Integer,Integer>, Tuple2<Integer, Integer>>() {
 			@Override
 			public Tuple2<Integer, Integer> map(Tuple2<Integer, Integer> sumBeta) throws Exception {
-				int e = 1052;
+				int e = 954;
 				int v = 100;
 				int estimate = (int) ((1.0 / (double) sumBeta.f0) * sumBeta.f1 * e * (v - 2));
 
@@ -107,7 +107,7 @@ public class StreamTriangleCount {
 			Tuple3<Triplet<Long, NullValue>, Integer, Integer>> {
 
 		public SampleTriangleInstance() {
-			states = new ConcurrentHashMap<Integer, SampleTriangleState>();
+			states = new ConcurrentHashMap<>();
 		}
 
 		@Override
@@ -141,8 +141,6 @@ public class StreamTriangleCount {
 						break;
 					}
 				}
-
-				// sampledVertexMap.put(getRuntimeContext().getIndexOfThisSubtask(), thirdVertex);
 
 				state.srcEdgeFound = false;
 				state.trgEdgeFound = false;

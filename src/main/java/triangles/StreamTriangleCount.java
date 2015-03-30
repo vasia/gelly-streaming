@@ -1,9 +1,11 @@
+package triangles;
+
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.streaming.api.collector.OutputSelector;
+import org.apache.flink.streaming.api.collector.selector.OutputSelector;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.IterativeDataStream;
 import org.apache.flink.streaming.api.datastream.SplitDataStream;
@@ -14,6 +16,7 @@ import org.apache.flink.util.Collector;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Scanner;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class StreamTriangleCount {
@@ -53,7 +56,7 @@ public class StreamTriangleCount {
 						}
 
 						out.collect(new Triplet<>(src, NullValue.getInstance(), trg));
-						// out.collect(new Triplet<>(trg, NullValue.getInstance(), src));
+						// out.collect(new triangles.Triplet<>(trg, NullValue.getInstance(), src));
 					}
 				});
 
@@ -90,8 +93,8 @@ public class StreamTriangleCount {
 		}).sum(1).map(new MapFunction<Tuple2<Integer,Integer>, Tuple2<Integer, Integer>>() {
 			@Override
 			public Tuple2<Integer, Integer> map(Tuple2<Integer, Integer> sumBeta) throws Exception {
-				int e = 954;
 				int v = 100;
+				int e = 954;
 				int estimate = (int) ((1.0 / (double) sumBeta.f0) * sumBeta.f1 * e * (v - 2));
 
 				return new Tuple2<>(sumBeta.f0, estimate);
@@ -102,7 +105,7 @@ public class StreamTriangleCount {
 		env.execute("Streaming Triangle Count (Estimate)");
 	}
 
-	private static final class SampleTriangleInstance
+	public static final class SampleTriangleInstance
 			extends RichMapFunction<Tuple3<Triplet<Long, NullValue>, Integer, Integer>,
 			Tuple3<Triplet<Long, NullValue>, Integer, Integer>> {
 
@@ -175,7 +178,7 @@ public class StreamTriangleCount {
 		}
 	}
 
-	private static final class SampleTriangleSplitter implements
+	public static final class SampleTriangleSplitter implements
 			OutputSelector<Tuple3<Triplet<Long, NullValue>, Integer, Integer>> {
 		@Override
 		public Iterable<String> select(Tuple3<Triplet<Long, NullValue>, Integer, Integer> tripletWithValue) {
@@ -198,7 +201,7 @@ public class StreamTriangleCount {
 		}
 	}
 
-	private static final class SampleTriangleState implements Serializable {
+	public static final class SampleTriangleState implements Serializable {
 
 		public long beta;
 
@@ -222,7 +225,7 @@ public class StreamTriangleCount {
 		}
 	}
 
-	private static final class Coin {
+	public static final class Coin {
 		public static boolean flip(int sides) {
 			return (Math.random() * (sides) < 1);
 		}

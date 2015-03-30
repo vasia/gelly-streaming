@@ -25,17 +25,14 @@ import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
-import org.apache.flink.types.NullValue;
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import java.io.Serializable;
 
 @RunWith(Parameterized.class)
 public class TestMapVertices extends MultipleProgramsTestBase {
@@ -82,6 +79,7 @@ public class TestMapVertices extends MultipleProgramsTestBase {
 				"5,6\n";
 	}
 
+	@SuppressWarnings("serial")
 	private static final class AddOneMapper implements MapFunction<Vertex<Long, Long>, Long> {
 		@Override
 		public Long map(Vertex<Long, Long> vertex) throws Exception {

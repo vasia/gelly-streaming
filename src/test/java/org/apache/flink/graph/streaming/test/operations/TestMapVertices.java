@@ -19,20 +19,24 @@
 package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
+import org.apache.flink.types.NullValue;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import java.io.Serializable;
 
 @RunWith(Parameterized.class)
 public class TestMapVertices extends MultipleProgramsTestBase {
@@ -79,7 +83,6 @@ public class TestMapVertices extends MultipleProgramsTestBase {
 				"5,6\n";
 	}
 
-	@SuppressWarnings("serial")
 	private static final class AddOneMapper implements MapFunction<Vertex<Long, Long>, Long> {
 		@Override
 		public Long map(Vertex<Long, Long> vertex) throws Exception {
@@ -87,4 +90,56 @@ public class TestMapVertices extends MultipleProgramsTestBase {
 		}
 	}
 
+	@Test
+	public void testWithTupleType() throws Exception {
+		/*
+		 * Test mapVertices() converting the vertex value type to tuple
+	     */
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		GraphStream<Long, Long, Long> graph = GraphStream.fromDataStream(
+				GraphStreamTestUtils.getLongLongVertexDataStream(env),
+				GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+
+		GraphStream<Long, Tuple2<Long, Long>, Long> mappedGraph = graph.mapVertices(new ToTuple2Mapper());
+
+		mappedGraph.getVertices().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,(1,2)\n" +
+				"2,(2,3)\n" +
+				"3,(3,4)\n" +
+				"4,(4,5)\n" +
+				"5,(5,6)\n";
+	}
+
+	private static final class ToTuple2Mapper implements MapFunction<Vertex<Long, Long>, Tuple2<Long, Long>> {
+		@Override
+		public Tuple2<Long, Long> map(Vertex<Long, Long> vertex) throws Exception {
+			return new Tuple2<>(vertex.getValue(), vertex.getValue() + 1);
+		}
+	}
+
+	@Test
+	public void testChainedMaps() throws Exception {
+		/*
+		 * Test mapVertices() where two maps are chained together
+	     */
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		GraphStream<Long, Long, Long> graph = GraphStream.fromDataStream(
+				GraphStreamTestUtils.getLongLongVertexDataStream(env),
+				GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+
+		GraphStream<Long, Tuple2<Long, Long>, Long> mappedGraph = graph
+				.mapVertices(new AddOneMapper())
+				.mapVertices(new ToTuple2Mapper());
+
+		mappedGraph.getVertices().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,(2,3)\n" +
+				"2,(3,4)\n" +
+				"3,(4,5)\n" +
+				"4,(5,6)\n" +
+				"5,(6,7)\n";
+	}
 }

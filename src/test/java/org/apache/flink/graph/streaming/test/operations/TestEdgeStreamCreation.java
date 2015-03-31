@@ -19,11 +19,10 @@
 package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
-import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.EdgeStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
-import org.apache.flink.types.NullValue;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -33,9 +32,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
-public class TestGraphStreamCreation extends MultipleProgramsTestBase {
+public class TestEdgeStreamCreation extends MultipleProgramsTestBase {
 
-	public TestGraphStreamCreation(TestExecutionMode mode) {
+	public TestEdgeStreamCreation(TestExecutionMode mode) {
 		super(mode);
 	}
 
@@ -62,36 +61,17 @@ public class TestGraphStreamCreation extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long, Long> graph = GraphStream.fromDataStream(
-				GraphStreamTestUtils.getLongLongVertexDataStream(env),
-				GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		EdgeStream<Long, Long> graph = new EdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
-		graph.getVertices().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		graph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
-		expectedResult = "1,1\n" +
-				"2,2\n" +
-				"3,3\n" +
-				"4,4\n" +
-				"5,5\n";
-	}
-
-	@Test
-	public void testCreationWithoutVertices() throws Exception {
-		/*
-		 * Test create() with only an edge data stream
-	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-
-		GraphStream<Long, NullValue, Long> graph = GraphStream.fromDataStream(
-				GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
-
-		graph.getVertices().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
-		env.execute();
-		expectedResult = "1,(null)\n" +
-				"2,(null)\n" +
-				"3,(null)\n" +
-				"4,(null)\n" +
-				"5,(null)\n";
+		expectedResult = "1,2,12\n" +
+				"1,3,13\n" +
+				"2,3,23\n" +
+				"3,4,34\n" +
+				"3,5,35\n" +
+				"4,5,45\n" +
+				"5,1,51\n";
 	}
 
 }

@@ -18,27 +18,18 @@
 
 package org.apache.flink.graph.streaming.test.operations;
 
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.core.fs.FileSystem;
-import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.streaming.GraphStream;
-import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
-import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
-public class TestMapEdges extends MultipleProgramsTestBase {
+public class TestEdgeStreamMapVertices extends MultipleProgramsTestBase {
 
-	public TestMapEdges(TestExecutionMode mode) {
+	public TestEdgeStreamMapVertices(TestExecutionMode mode) {
 		super(mode);
 	}
 
@@ -58,91 +49,81 @@ public class TestMapEdges extends MultipleProgramsTestBase {
 		compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
 
+	/*
 	@Test
 	public void testWithSameType() throws Exception {
-		/*
-		 * Test mapEdges() keeping the same edge types
-	     */
+		// Test mapVertices() keeping the same vertex types
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long, Long> graph = GraphStream.fromDataStream(
+		EdgeStream<Long, Long, Long> graph = EdgeStream.fromDataStream(
 				GraphStreamTestUtils.getLongLongVertexDataStream(env),
 				GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
-		graph = graph.mapEdges(new AddOneMapper());
+		graph = graph.mapVertices(new AddOneMapper());
 
-		graph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		graph.getVertices().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
-		expectedResult = "1,2,13\n" +
-				"1,3,14\n" +
-				"2,3,24\n" +
-				"3,4,35\n" +
-				"3,5,36\n" +
-				"4,5,46\n" +
-				"5,1,52\n";
+		expectedResult = "1,2\n" +
+				"2,3\n" +
+				"3,4\n" +
+				"4,5\n" +
+				"5,6\n";
 	}
 
-	private static final class AddOneMapper implements MapFunction<Edge<Long, Long>, Long> {
+	private static final class AddOneMapper implements MapFunction<Vertex<Long, Long>, Long> {
 		@Override
-		public Long map(Edge<Long, Long> edge) throws Exception {
-			return edge.getValue() + 1;
+		public Long map(Vertex<Long, Long> vertex) throws Exception {
+			return vertex.getValue() + 1;
 		}
 	}
 
 	@Test
 	public void testWithTupleType() throws Exception {
-		/*
-		 * Test mapEdges() converting the edge value type to tuple
-	     */
+		// Test mapVertices() converting the vertex value type to tuple
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long, Long> graph = GraphStream.fromDataStream(
+		EdgeStream<Long, Long, Long> graph = EdgeStream.fromDataStream(
 				GraphStreamTestUtils.getLongLongVertexDataStream(env),
 				GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
-		GraphStream<Long, Long, Tuple2<Long, Long>> mappedGraph = graph.mapEdges(new ToTuple2Mapper());
+		EdgeStream<Long, Tuple2<Long, Long>, Long> mappedGraph = graph.mapVertices(new ToTuple2Mapper());
 
-		mappedGraph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		mappedGraph.getVertices().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
-		expectedResult = "1,2,(12,13)\n" +
-				"1,3,(13,14)\n" +
-				"2,3,(23,24)\n" +
-				"3,4,(34,35)\n" +
-				"3,5,(35,36)\n" +
-				"4,5,(45,46)\n" +
-				"5,1,(51,52)\n";
+		expectedResult = "1,(1,2)\n" +
+				"2,(2,3)\n" +
+				"3,(3,4)\n" +
+				"4,(4,5)\n" +
+				"5,(5,6)\n";
 	}
 
-	private static final class ToTuple2Mapper implements MapFunction<Edge<Long, Long>, Tuple2<Long, Long>> {
+	private static final class ToTuple2Mapper implements MapFunction<Vertex<Long, Long>, Tuple2<Long, Long>> {
 		@Override
-		public Tuple2<Long, Long> map(Edge<Long, Long> edge) throws Exception {
-			return new Tuple2<>(edge.getValue(), edge.getValue() + 1);
+		public Tuple2<Long, Long> map(Vertex<Long, Long> vertex) throws Exception {
+			return new Tuple2<>(vertex.getValue(), vertex.getValue() + 1);
 		}
 	}
 
 	@Test
 	public void testChainedMaps() throws Exception {
-		/*
-		 * Test mapEdges() where two maps are chained together
-	     */
+		// Test mapVertices() where two maps are chained together
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long, Long> graph = GraphStream.fromDataStream(
+		EdgeStream<Long, Long, Long> graph = EdgeStream.fromDataStream(
 				GraphStreamTestUtils.getLongLongVertexDataStream(env),
 				GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
-		GraphStream<Long, Long, Tuple2<Long, Long>> mappedGraph = graph
-				.mapEdges(new AddOneMapper())
-				.mapEdges(new ToTuple2Mapper());
+		EdgeStream<Long, Tuple2<Long, Long>, Long> mappedGraph = graph
+				.mapVertices(new AddOneMapper())
+				.mapVertices(new ToTuple2Mapper());
 
-		mappedGraph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		mappedGraph.getVertices().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
-		expectedResult = "1,2,(13,14)\n" +
-				"1,3,(14,15)\n" +
-				"2,3,(24,25)\n" +
-				"3,4,(35,36)\n" +
-				"3,5,(36,37)\n" +
-				"4,5,(46,47)\n" +
-				"5,1,(52,53)\n";
+		expectedResult = "1,(2,3)\n" +
+				"2,(3,4)\n" +
+				"3,(4,5)\n" +
+				"4,(5,6)\n" +
+				"5,(6,7)\n";
 	}
+	*/
 }

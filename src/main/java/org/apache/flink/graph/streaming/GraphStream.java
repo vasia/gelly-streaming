@@ -157,9 +157,9 @@ public class GraphStream<K extends Comparable<K> & Serializable, VV extends Seri
 	 */
     public <NV extends Serializable> GraphStream<K, NV, EV> mapVertices(final MapFunction<Vertex<K, VV>, NV> mapper) {
     	TypeInformation<K> keyType = ((TupleTypeInfo<?>) vertices.getType()).getTypeAt(0);
-    	DataStream<Vertex<K, NV>> mappedVertices = vertices.map(new ApplyMapperToVertexWithType<K, VV, NV>(mapper,
-    			keyType));
-        return new GraphStream<K, NV, EV>(mappedVertices, this.getEdges(), this.context);
+    	DataStream<Vertex<K, NV>> mappedVertices = vertices.map(new ApplyMapperToVertexWithType<>(mapper,
+			    keyType));
+        return new GraphStream<>(mappedVertices, this.getEdges(), this.context);
     }
     
     @SuppressWarnings("serial")
@@ -174,8 +174,8 @@ public class GraphStream<K extends Comparable<K> & Serializable, VV extends Seri
 			this.keyType = keyType;
 		}
 		
-		public Vertex<K, NV> map(Vertex<K, VV> value) throws Exception {
-			return new Vertex<K, NV>(value.f0, innerMapper.map(value));
+		public Vertex<K, NV> map(Vertex<K, VV> vertex) throws Exception {
+			return new Vertex<>(vertex.getId(), innerMapper.map(vertex));
 		}
 	
 		@SuppressWarnings("unchecked")
@@ -188,30 +188,46 @@ public class GraphStream<K extends Comparable<K> & Serializable, VV extends Seri
 			return (TypeInformation<Vertex<K, NV>>) returnType;
 		}
     }
+
 	/**
 	 * Apply a function to the attribute of each edge in the graph stream.
 	 *
 	 * @param mapper the map function to apply.
 	 * @return a new graph stream.
 	 */
-	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public <NV extends Serializable> GraphStream<K, VV, NV> mapEdges(final MapFunction<Edge<K, EV>, NV> mapper) {
-
 		TypeInformation<K> keyType = ((TupleTypeInfo<?>) edges.getType()).getTypeAt(0);
-		TypeInformation<NV> valueType = TypeExtractor.createTypeInfo(MapFunction.class, mapper.getClass(), 1, null, null);
-
-		TypeInformation<Edge<K, NV>> returnType = (TypeInformation<Edge<K, NV>>) new TupleTypeInfo(
-				Edge.class, keyType, keyType, valueType);
-
-		@SuppressWarnings("serial")
-		DataStream<Edge<K, NV>> mappedEdges = edges.map(
-				new MapFunction<Edge<K, EV>, Edge<K, NV>>() {
-					public Edge<K, NV> map(Edge<K, EV> value) throws Exception {
-						return new Edge<>(value.f0, value.f1, mapper
-								.map(value));
-					}
-				}).setType(returnType);
-
-		return new GraphStream<>(this.vertices, mappedEdges, this.context);
+		DataStream<Edge<K, NV>> mappedEdges = edges.map(new ApplyMapperToEdgeWithType<>(mapper,
+				keyType));
+		return new GraphStream<>(this.getVertices(), mappedEdges, this.context);
 	}
+
+	@SuppressWarnings("serial")
+	private static final class ApplyMapperToEdgeWithType<K extends Comparable<K> & Serializable,
+			EV extends Serializable, NV extends Serializable> implements MapFunction
+			<Edge<K, EV>, Edge<K, NV>>, ResultTypeQueryable<Edge<K, NV>> {
+
+		private MapFunction<Edge<K, EV>, NV> innerMapper;
+		private transient TypeInformation<K> keyType;
+
+		public ApplyMapperToEdgeWithType(MapFunction<Edge<K, EV>, NV> theMapper, TypeInformation<K> keyType) {
+			this.innerMapper = theMapper;
+			this.keyType = keyType;
+		}
+
+		public Edge<K, NV> map(Edge<K, EV> edge) throws Exception {
+			return new Edge<>(edge.getSource(), edge.getTarget(), innerMapper.map(edge));
+		}
+
+		@SuppressWarnings("unchecked")
+		@Override
+		public TypeInformation<Edge<K, NV>> getProducedType() {
+			TypeInformation<NV> valueType = TypeExtractor
+					.createTypeInfo(MapFunction.class, innerMapper.getClass(), 1, null, null);
+			@SuppressWarnings("rawtypes")
+			TypeInformation<?> returnType = new TupleTypeInfo<>(Edge.class, keyType, keyType, valueType);
+			return (TypeInformation<Edge<K, NV>>) returnType;
+		}
+	}
+
 }

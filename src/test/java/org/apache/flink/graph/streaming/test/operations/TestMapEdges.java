@@ -22,7 +22,7 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.EdgeStream;
+import org.apache.flink.graph.streaming.EdgeOnlyStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
@@ -35,9 +35,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
-public class TestEdgeStreamMapEdges extends MultipleProgramsTestBase {
+public class TestMapEdges extends MultipleProgramsTestBase {
 
-	public TestEdgeStreamMapEdges(TestExecutionMode mode) {
+	public TestMapEdges(TestExecutionMode mode) {
 		super(mode);
 	}
 
@@ -64,7 +64,7 @@ public class TestEdgeStreamMapEdges extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeStream<Long, Long> graph = new EdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph = graph.mapEdges(new AddOneMapper());
 
@@ -93,9 +93,9 @@ public class TestEdgeStreamMapEdges extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeStream<Long, Long> graph = new EdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
-		EdgeStream<Long, Tuple2<Long, Long>> mappedGraph = graph.mapEdges(new ToTuple2Mapper());
+		EdgeOnlyStream<Long, Tuple2<Long, Long>> mappedGraph = graph.mapEdges(new ToTuple2Mapper());
 
 		mappedGraph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
@@ -122,9 +122,9 @@ public class TestEdgeStreamMapEdges extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeStream<Long, Long> graph = new EdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
-		EdgeStream<Long, Tuple2<Long, Long>> mappedGraph = graph
+		EdgeOnlyStream<Long, Tuple2<Long, Long>> mappedGraph = graph
 				.mapEdges(new AddOneMapper())
 				.mapEdges(new ToTuple2Mapper());
 

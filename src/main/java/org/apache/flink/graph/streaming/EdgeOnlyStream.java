@@ -45,8 +45,7 @@ import java.util.Set;
  * @param <K> the key type for edge and vertex identifiers.
  * @param <EV> the value type for edges.
  */
-public class EdgeStream<K extends Comparable<K> & Serializable, EV extends Serializable>
-		implements GraphStream<K, NullValue, EV> {
+public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends Serializable> {
 
 	private final StreamExecutionEnvironment context;
 	private final DataStream<Edge<K, EV>> edges;
@@ -57,7 +56,7 @@ public class EdgeStream<K extends Comparable<K> & Serializable, EV extends Seria
 	 * @param edges a DataStream of edges.
 	 * @param context the flink execution environment.
 	 */
-	public EdgeStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context) {
+	public EdgeOnlyStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context) {
 		this.edges = edges;
 		this.context = context;
 	}
@@ -115,28 +114,16 @@ public class EdgeStream<K extends Comparable<K> & Serializable, EV extends Seria
 	}
 
 	/**
-	 * Apply a function to the attribute of each vertex in the graph stream.
-	 * This operation is unsupported for EdgeStreams
-	 *
-	 * @param mapper the map function to apply.
-	 * @return a new graph stream.
-	 */
-    public <NV extends Serializable> GraphStream<K, NV, EV> mapVertices(
-		    final MapFunction<Vertex<K, NullValue>, NV> mapper) {
-	    throw new UnsupportedOperationException("MapVertices is unsupported for EdgeStreams");
-    }
-
-	/**
 	 * Apply a function to the attribute of each edge in the graph stream.
 	 *
 	 * @param mapper the map function to apply.
 	 * @return a new graph stream.
 	 */
-	public <NV extends Serializable> EdgeStream<K, NV> mapEdges(final MapFunction<Edge<K, EV>, NV> mapper) {
+	public <NV extends Serializable> EdgeOnlyStream<K, NV> mapEdges(final MapFunction<Edge<K, EV>, NV> mapper) {
 		TypeInformation<K> keyType = ((TupleTypeInfo<?>) edges.getType()).getTypeAt(0);
 		DataStream<Edge<K, NV>> mappedEdges = edges.map(new ApplyMapperToEdgeWithType<>(mapper,
 				keyType));
-		return new EdgeStream<>(mappedEdges, this.context);
+		return new EdgeOnlyStream<>(mappedEdges, this.context);
 	}
 
 	@SuppressWarnings("serial")
@@ -174,13 +161,12 @@ public class EdgeStream<K extends Comparable<K> & Serializable, EV extends Seria
 	 * @param filter the filter function to apply.
 	 * @return the filtered graph stream.
 	 */
-	@Override
-	public EdgeStream<K, EV> filterVertices(FilterFunction<Vertex<K, NullValue>> filter) {
+	public EdgeOnlyStream<K, EV> filterVertices(FilterFunction<Vertex<K, NullValue>> filter) {
 
 		DataStream<Edge<K, EV>> remainingEdges = this.getEdges()
 				.filter(new ApplyVertexFilterToEdges<K, EV>(filter));
 
-		return new EdgeStream<>(remainingEdges, this.context);
+		return new EdgeOnlyStream<>(remainingEdges, this.context);
 	}
 
 	private static final class ApplyVertexFilterToEdges<K extends Comparable<K> & Serializable,
@@ -211,8 +197,7 @@ public class EdgeStream<K extends Comparable<K> & Serializable, EV extends Seria
 	 * @param filter the filter function to apply.
 	 * @return the filtered graph stream.
 	 */
-	@Override
-	public GraphStream<K, NullValue, EV> filterEdges(FilterFunction<Edge<K, EV>> filter) {
+	public EdgeOnlyStream<K, EV> filterEdges(FilterFunction<Edge<K, EV>> filter) {
 		throw new UnsupportedOperationException("MapVertices is unsupported for EdgeStreams");
 	}
 

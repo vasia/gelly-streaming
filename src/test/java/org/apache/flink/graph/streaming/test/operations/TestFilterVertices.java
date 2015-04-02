@@ -21,7 +21,7 @@ package org.apache.flink.graph.streaming.test.operations;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.streaming.EdgeStream;
+import org.apache.flink.graph.streaming.EdgeOnlyStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
@@ -35,9 +35,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
-public class TestEdgeStreamFilterVertices extends MultipleProgramsTestBase {
+public class TestFilterVertices extends MultipleProgramsTestBase {
 
-	public TestEdgeStreamFilterVertices(TestExecutionMode mode) {
+	public TestFilterVertices(TestExecutionMode mode) {
 		super(mode);
 	}
 
@@ -64,7 +64,7 @@ public class TestEdgeStreamFilterVertices extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeStream<Long, Long> graph = new EdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph = graph.filterVertices(new LowVertexKeyFilter());
 
@@ -91,7 +91,7 @@ public class TestEdgeStreamFilterVertices extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeStream<Long, Long> graph = new EdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph = graph.filterVertices(new EmptyFilter());
 
@@ -121,7 +121,7 @@ public class TestEdgeStreamFilterVertices extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeStream<Long, Long> graph = new EdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph = graph.filterVertices(new DiscardFilter());
 

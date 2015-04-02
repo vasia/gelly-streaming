@@ -19,7 +19,7 @@
 package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
-import org.apache.flink.graph.streaming.EdgeStream;
+import org.apache.flink.graph.streaming.EdgeOnlyStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
@@ -32,9 +32,9 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
-public class TestEdgeStreamCreation extends MultipleProgramsTestBase {
+public class TestGraphStreamCreation extends MultipleProgramsTestBase {
 
-	public TestEdgeStreamCreation(TestExecutionMode mode) {
+	public TestGraphStreamCreation(TestExecutionMode mode) {
 		super(mode);
 	}
 
@@ -61,7 +61,7 @@ public class TestEdgeStreamCreation extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeStream<Long, Long> graph = new EdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();

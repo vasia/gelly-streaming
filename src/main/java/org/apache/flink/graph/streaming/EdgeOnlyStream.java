@@ -163,7 +163,7 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 	 */
 	public EdgeOnlyStream<K, EV> filterVertices(FilterFunction<Vertex<K, NullValue>> filter) {
 
-		DataStream<Edge<K, EV>> remainingEdges = this.getEdges()
+		DataStream<Edge<K, EV>> remainingEdges = this.edges
 				.filter(new ApplyVertexFilterToEdges<K, EV>(filter));
 
 		return new EdgeOnlyStream<>(remainingEdges, this.context);
@@ -198,7 +198,11 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 	 * @return the filtered graph stream.
 	 */
 	public EdgeOnlyStream<K, EV> filterEdges(FilterFunction<Edge<K, EV>> filter) {
-		throw new UnsupportedOperationException("MapVertices is unsupported for EdgeStreams");
+
+		DataStream<Edge<K, EV>> remainingEdges = this.edges
+				.filter(filter);
+
+		return new EdgeOnlyStream<>(remainingEdges, this.context);
 	}
 
 }

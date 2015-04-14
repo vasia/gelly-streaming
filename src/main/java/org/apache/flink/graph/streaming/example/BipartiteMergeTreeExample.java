@@ -16,14 +16,13 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming;
+package org.apache.flink.graph.streaming.example;
 
 import io.netty.util.internal.ConcurrentSet;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple4;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -85,8 +84,8 @@ public class BipartiteMergeTreeExample {
 		env.execute("Distributed Merge Tree Sandbox");
 	}
 
-	private static final class MergeTreeMapper extends RichFlatMapFunction<Tuple4<Long,Set<Long>,Set<Long>,Boolean>,
-			Tuple4<Long,Set<Long>,Set<Long>,Boolean>> {
+	private static final class MergeTreeMapper extends RichFlatMapFunction<Tuple3<Long, SetPair, Boolean>,
+			Tuple3<Long, SetPair, Boolean>> {
 
 		// TODO: figure out what causes a concurrent modification exception and fix it
 		private Map<Long, ConcurrentSet<SetPair>> pool;
@@ -97,15 +96,15 @@ public class BipartiteMergeTreeExample {
 		}
 
 		@Override
-		public void flatMap(Tuple4<Long, Set<Long>, Set<Long>, Boolean> input,
-				Collector<Tuple4<Long, Set<Long>, Set<Long>, Boolean>> out) throws Exception {
+		public void flatMap(Tuple3<Long, SetPair, Boolean> input,
+				Collector<Tuple3<Long, SetPair, Boolean>> out) throws Exception {
 
 			id = getRuntimeContext().getIndexOfThisSubtask();
 			long inputId = input.f0;
-			SetPair inputPair = new SetPair(input.f1, input.f2);
+			SetPair inputPair = input.f1;
 
 			// If a failure was already found, propagate it
-			if (!input.f3) {
+			if (!input.f2) {
 				collectPair(out, null);
 				return;
 			}
@@ -132,7 +131,7 @@ public class BipartiteMergeTreeExample {
 		}
 
 		private void combinePool(long inputId, SetPair pair,
-				Collector<Tuple4<Long, Set<Long>, Set<Long>, Boolean>> out) {
+				Collector<Tuple3<Long, SetPair, Boolean>> out) {
 
 			long otherKey = inputId;
 
@@ -277,7 +276,7 @@ public class BipartiteMergeTreeExample {
 			pool.get(inputId).add(pair);
 		}
 
-		private void collectPair(Collector<Tuple4<Long, Set<Long>, Set<Long>, Boolean>> out, SetPair pair) {
+		private void collectPair(Collector<Tuple3<Long, SetPair, Boolean>> out, SetPair pair) {
 			SetPair result = pair;
 			Boolean success = true;
 
@@ -288,13 +287,13 @@ public class BipartiteMergeTreeExample {
 				success = false;
 			}
 
-			out.collect(new Tuple4<>(id, result.getPos(), result.getNeg(), success));
+			out.collect(new Tuple3<>(id, result, success));
 		}
 
 	}
 
 	private static final class MergeTreeKeySelector
-			implements KeySelector<Tuple4<Long,Set<Long>,Set<Long>,Boolean>, Long> {
+			implements KeySelector<Tuple3<Long, SetPair, Boolean>, Long> {
 
 		private int level;
 
@@ -303,52 +302,27 @@ public class BipartiteMergeTreeExample {
 		}
 
 		@Override
-		public Long getKey(Tuple4<Long, Set<Long>, Set<Long>, Boolean> input) throws Exception {
+		public Long getKey(Tuple3<Long, SetPair, Boolean> input) throws Exception {
 			return input.f0 >> (level + 1);
 		}
 	}
 
 	private static final class InitialSetMapper implements
-			MapFunction<Edge<Long,NullValue>, Tuple4<Long, Set<Long>, Set<Long>, Boolean>> {
+			MapFunction<Edge<Long,NullValue>, Tuple3<Long, SetPair, Boolean>> {
 		@Override
-		public Tuple4<Long, Set<Long>, Set<Long>, Boolean> map(Edge<Long, NullValue> edge) throws Exception {
+		public Tuple3<Long, SetPair, Boolean> map(Edge<Long, NullValue> edge) throws Exception {
 			Set<Long> pos = new HashSet<>();
 			Set<Long> neg = new HashSet<>();
 
 			pos.add(edge.getSource());
 			neg.add(edge.getTarget());
 
+			SetPair pair = new SetPair(pos, neg);
+
 			// -1 indicated that this is the first level of merging
 			// in this case, set-pairs have one element each, and need to be merged, even though they have the same id
 			// as such, set-pairs with this "special" id can be merged in MergeTreeMapper
-			return new Tuple4<>(-1L, pos, neg, true);
-		}
-	}
-
-	private static final class SetPair extends Tuple2<Set<Long>, Set<Long>> {
-
-		public SetPair(Set<Long> pos, Set<Long> neg) {
-			this.f0 = pos;
-			this.f1 = neg;
-		}
-
-		public Set<Long> getPos() {
-			return this.f0;
-		}
-
-		public Set<Long> getNeg() {
-			return this.f1;
-		}
-
-		@Override
-		public SetPair copy() {
-			Set<Long> pos = new HashSet<>();
-			pos.addAll(this.f0);
-
-			Set<Long> neg = new HashSet<>();
-			neg.addAll(this.f1);
-
-			return new SetPair(pos, neg);
+			return new Tuple3<>(-1L, pair, true);
 		}
 	}
 

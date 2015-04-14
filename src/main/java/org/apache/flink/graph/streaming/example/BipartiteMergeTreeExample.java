@@ -35,6 +35,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 public class BipartiteMergeTreeExample {
@@ -42,26 +43,25 @@ public class BipartiteMergeTreeExample {
 	public BipartiteMergeTreeExample() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
-		// The "square" bipartite graph
-		List<String> sampleStream = new ArrayList<>();
-		sampleStream.add("1,2");
-		sampleStream.add("3,4");
-		sampleStream.add("1,3");
-		sampleStream.add("2,4");
+		// Generate a pseudo-random stream of 2048 edges
+		Random rnd = new Random(0xDEADBEEF);
 
-		// A failing configuration
-		// Remove the edge (4,5) to make it bipartite again
-		List<String> sampleStream2 = new ArrayList<>();
-		sampleStream2.add("1,2");
-		sampleStream2.add("2,3");
-		sampleStream2.add("1,4");
-		// sampleStream2.add("4,5");
-		sampleStream2.add("3,5");
-		sampleStream2.add("1,5");
-		sampleStream2.add("3,6");
-		sampleStream2.add("4,7");
+		List<Integer> vertices = new ArrayList<>();
+		for (int i = 0; i < 8; ++i) {
+			vertices.add(i * 2 + 1);
+		}
 
-		DataStream<Edge<Long, NullValue>> edges = env.fromCollection(sampleStream2)
+		List<String> edgeList = new ArrayList<>();
+		while (!vertices.isEmpty()) {
+
+			int id = rnd.nextInt(vertices.size());
+			int vertex = vertices.remove(id);
+
+			edgeList.add(String.format("%d,%d", vertex, vertex + 1));
+			edgeList.add(String.format("%d,%d", vertex, vertex + 3));
+		}
+
+		DataStream<Edge<Long, NullValue>> edges = env.fromCollection(edgeList)
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
@@ -89,10 +89,17 @@ public class BipartiteMergeTreeExample {
 
 		// TODO: figure out what causes a concurrent modification exception and fix it
 		private Map<Long, ConcurrentSet<SetPair>> pool;
+
+		private Map<Long, ConcurrentSet<SetPair>> addedPairs;
+		private Map<Long, ConcurrentSet<SetPair>> removedPairs;
+
 		private long id;
 
 		public MergeTreeMapper() {
 			pool = new HashMap<>();
+
+			addedPairs = new HashMap<>();
+			removedPairs = new HashMap<>();
 		}
 
 		@Override
@@ -100,6 +107,7 @@ public class BipartiteMergeTreeExample {
 				Collector<Tuple3<Long, SetPair, Boolean>> out) throws Exception {
 
 			id = getRuntimeContext().getIndexOfThisSubtask();
+
 			long inputId = input.f0;
 			SetPair inputPair = input.f1;
 
@@ -111,23 +119,27 @@ public class BipartiteMergeTreeExample {
 
 			// If the pool is empty, just return the set-pair
 			if (pool.isEmpty()) {
-				addToPool(inputId, inputPair);
 				collectPair(out, inputPair);
-				return;
+
+			} else {
+
+				// Run optimizations on the pool entries from the same mapper
+				boolean skip = optimizePool(inputId, inputPair);
+
+				if (skip) {
+					return;
+				}
+
+				// Combine the new set-pair with the other part of the pool
+				combinePool(inputId, inputPair, out);
 			}
-
-			// Run optimizations on the pool entries from the same mapper
-			boolean skip = optimizePool(inputId, inputPair);
-
-			if (skip) {
-				return;
-			}
-
-			// Combine the new set-pair with the other part of the pool
-			combinePool(inputId, inputPair, out);
 
 			// Add the new pair to the pool
 			addToPool(inputId, inputPair);
+
+			// Execute the additions and removals to/from the pool
+			updatePool();
+
 		}
 
 		private void combinePool(long inputId, SetPair pair,
@@ -202,6 +214,14 @@ public class BipartiteMergeTreeExample {
 					newPair.getPos().addAll(b);
 					newPair.getNeg().addAll(a);
 
+					// Update the pool
+					// No need to add newPair to the pool later on
+					removeFromPool(inputId, pair);
+					removeFromPool(inputId, otherPair);
+
+					addToPool(inputId, oldPair);
+					addToPool(inputId, newPair);
+
 					// Emit them as well
 					collectPair(out, oldPair);
 					collectPair(out, newPair);
@@ -269,11 +289,44 @@ public class BipartiteMergeTreeExample {
 		}
 
 		private void addToPool(long inputId, SetPair pair) {
-			if (!pool.containsKey(inputId)) {
-				pool.put(inputId, new ConcurrentSet<SetPair>());
+			if (!addedPairs.containsKey(inputId)) {
+				addedPairs.put(inputId, new ConcurrentSet<SetPair>());
 			}
 
-			pool.get(inputId).add(pair);
+			addedPairs.get(inputId).add(pair);
+		}
+
+		private void removeFromPool(long inputId, SetPair pair) {
+			if (!removedPairs.containsKey(inputId)) {
+				removedPairs.put(inputId, new ConcurrentSet<SetPair>());
+			}
+
+			removedPairs.get(inputId).add(pair);
+		}
+
+		private void updatePool() {
+
+			// Execute additions
+			for (Map.Entry<Long, ConcurrentSet<SetPair>> e : addedPairs.entrySet()) {
+				if (!pool.containsKey(e.getKey())) {
+					pool.put(e.getKey(), new ConcurrentSet<SetPair>());
+				}
+
+				for (SetPair pair : e.getValue()) {
+					pool.get(e.getKey()).add(pair);
+				}
+			}
+
+			// Execute removals
+			for (Map.Entry<Long, ConcurrentSet<SetPair>> e : removedPairs.entrySet()) {
+				if (!pool.containsKey(e.getKey())) {
+					continue;
+				}
+
+				for (SetPair pair : e.getValue()) {
+					pool.get(e.getKey()).remove(pair);
+				}
+			}
 		}
 
 		private void collectPair(Collector<Tuple3<Long, SetPair, Boolean>> out, SetPair pair) {
@@ -319,7 +372,7 @@ public class BipartiteMergeTreeExample {
 
 			SetPair pair = new SetPair(pos, neg);
 
-			// -1 indicated that this is the first level of merging
+			// -1 indicates that this is the first level of merging
 			// in this case, set-pairs have one element each, and need to be merged, even though they have the same id
 			// as such, set-pairs with this "special" id can be merged in MergeTreeMapper
 			return new Tuple3<>(-1L, pair, true);

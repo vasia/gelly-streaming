@@ -18,12 +18,12 @@
 
 package org.apache.flink.graph.streaming.example;
 
-import io.netty.util.internal.ConcurrentSet;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.functions.KeySelector;
-import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.streaming.example.utils.Candidate;
+import org.apache.flink.graph.streaming.example.utils.SetPair;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
@@ -32,7 +32,6 @@ import org.apache.flink.util.Collector;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -47,7 +46,7 @@ public class BipartiteMergeTreeExample {
 		Random rnd = new Random(0xDEADBEEF);
 
 		List<Integer> vertices = new ArrayList<>();
-		for (int i = 0; i < 8; ++i) {
+		for (int i = 0; i < 10; ++i) {
 			vertices.add(i * 2 + 1);
 		}
 
@@ -60,6 +59,9 @@ public class BipartiteMergeTreeExample {
 			edgeList.add(String.format("%d,%d", vertex, vertex + 1));
 			edgeList.add(String.format("%d,%d", vertex, vertex + 3));
 		}
+
+		// Add this edge to make it fail
+		// edgeList.add("5,17");
 
 		DataStream<Edge<Long, NullValue>> edges = env.fromCollection(edgeList)
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
@@ -84,269 +86,279 @@ public class BipartiteMergeTreeExample {
 		env.execute("Distributed Merge Tree Sandbox");
 	}
 
-	private static final class MergeTreeMapper extends RichFlatMapFunction<Tuple3<Long, SetPair, Boolean>,
-			Tuple3<Long, SetPair, Boolean>> {
+	private static final class MergeTreeMapper extends RichFlatMapFunction<Candidate, Candidate> {
 
-		// TODO: figure out what causes a concurrent modification exception and fix it
-		private Map<Long, ConcurrentSet<SetPair>> pool;
+		private enum Matching {
+			Failed, Disjoint, Normal, Reversed
+		}
 
-		private Map<Long, ConcurrentSet<SetPair>> addedPairs;
-		private Map<Long, ConcurrentSet<SetPair>> removedPairs;
-
-		private long id;
+		private CandidatePool pool;
+		private long self;
 
 		public MergeTreeMapper() {
-			pool = new HashMap<>();
-
-			addedPairs = new HashMap<>();
-			removedPairs = new HashMap<>();
+			pool = new CandidatePool();
 		}
 
 		@Override
-		public void flatMap(Tuple3<Long, SetPair, Boolean> input,
-				Collector<Tuple3<Long, SetPair, Boolean>> out) throws Exception {
+		public void flatMap(Candidate input, Collector<Candidate> out) throws Exception {
 
-			id = getRuntimeContext().getIndexOfThisSubtask();
+			self = getRuntimeContext().getIndexOfThisSubtask();
 
-			long inputId = input.f0;
-			SetPair inputPair = input.f1;
+			long id = input.f0;
+			Set<SetPair> pairs = input.f1;
+			boolean failure = !input.f2;
+
+			// System.out.println("@" + self + ", from: " + id + " -> " + pairs + ", pool: " + pool);
 
 			// If a failure was already found, propagate it
-			if (!input.f2) {
-				collectPair(out, null);
+			if (failure) {
+				fail(out);
 				return;
 			}
 
-			// If the pool is empty, just return the set-pair
+			// If the pool is empty, just return the set-pair and add the new pair to the pool
 			if (pool.isEmpty()) {
-				collectPair(out, inputPair);
+				pool.addAll(id, pairs);
+				pool.update();
+
+				out.collect(new Candidate(self, pairs, true));
+				return;
+			}
+
+			Set<SetPair> diff;
+
+			if (!pool.containsKey(id)) {
+				pool.addAll(id, pairs);
+				pool.update();
+
+				diff = pairs;
 
 			} else {
-
-				// Run optimizations on the pool entries from the same mapper
-				boolean skip = optimizePool(inputId, inputPair);
-
-				if (skip) {
-					return;
-				}
-
-				// Combine the new set-pair with the other part of the pool
-				combinePool(inputId, inputPair, out);
+				// Combine the new set-pair with the same part of the pool
+				diff = combine(id, pairs);
 			}
 
-			// Add the new pair to the pool
-			addToPool(inputId, inputPair);
+			// Check for failure
+			if (diff == null) {
+				fail(out);
+				return;
+			}
 
-			// Execute the additions and removals to/from the pool
-			updatePool();
+			// Find the other part of the pool
+			long otherId;
+			try {
+				otherId = pool.otherKey(id);
+			} catch (CandidatePool.KeyNotFoundException e) {
+				// If it doesn't exist, collect the result of combine
+				out.collect(new Candidate(self, diff, true));
+				return;
+			}
 
+			// Combine the new set-pair with the other part of the pool
+			diff = combine(otherId, diff);
+
+			if (diff == null) {
+				fail(out);
+				return;
+			}
+
+			out.collect(new Candidate(self, diff, true));
 		}
 
-		private void combinePool(long inputId, SetPair pair,
-				Collector<Tuple3<Long, SetPair, Boolean>> out) {
+		private Set<SetPair> combine(long key, Set<SetPair> newSet) {
 
-			long otherKey = inputId;
-
-			// On the first level, ids are -1, which can be combined with itself
-			if (inputId != -1) {
-				Iterator<Long> keys = pool.keySet().iterator();
-
-				while (keys.hasNext() && otherKey == inputId) {
-					otherKey = keys.next();
-				}
-
-				if (!keys.hasNext() && otherKey == inputId) {
-					// There is no other key in the pool at the moment
-					return;
-				}
-			}
-
-			// Try to match the new input with all set-pairs in the pool
-			ConcurrentSet<SetPair> otherPool = pool.get(otherKey);
-
-			Set<Long> a = pair.getPos();
-			Set<Long> b = pair.getNeg();
+			Set<SetPair> diff = new HashSet<>();
 			boolean allFailed = true;
 
-			for (SetPair otherPair : otherPool) {
+			for (SetPair newPair : newSet) {
+				Set<Long> pos = newPair.getPos();
+				Set<Long> neg = newPair.getNeg();
 
-				boolean aInPos = false;
-				boolean aInNeg = false;
-				boolean bInPos = false;
-				boolean bInNeg = false;
+				for (SetPair oldPair : pool.get(key)) {
 
-				for (Long vertex : a) {
-					if (otherPair.getPos().contains(vertex)) {
-						aInPos = true;
+					// System.out.println("Comparing " + oldPair + " vs " + newPair);
+					Matching result = evaluate(oldPair, newPair);
+					// System.out.println("Result: " + result.name());
+
+					switch (result) {
+						case Failed:
+							pool.remove(key, oldPair);
+							break;
+						case Disjoint:
+							allFailed = false;
+
+							// Create all possibilities
+							SetPair pairOne = oldPair.copy();
+							SetPair pairTwo = oldPair.copy();
+
+							pairOne.getPos().addAll(pos);
+							pairOne.getNeg().addAll(neg);
+
+							pairTwo.getPos().addAll(neg);
+							pairTwo.getNeg().addAll(pos);
+
+							// Update the pool
+							pool.remove(key, oldPair);
+							pool.add(key, pairOne);
+							pool.add(key, pairTwo);
+
+							diff.add(pairOne);
+							diff.add(pairTwo);
+							break;
+
+						case Normal:
+						case Reversed:
+							allFailed = false;
+
+							SetPair pair = oldPair.copy();
+							if (result.equals(Matching.Normal)) {
+								// Resolve pos -> pos, neg -> neg
+								pair.getPos().addAll(pos);
+								pair.getNeg().addAll(neg);
+							} else {
+								// Resolve pos -> neg, neg -> pos
+								pair.getPos().addAll(neg);
+								pair.getNeg().addAll(pos);
+							}
+
+							pool.remove(key, oldPair);
+							pool.add(key, pair);
+							diff.add(pair);
+							break;
 					}
-					if (otherPair.getNeg().contains(vertex)) {
-						aInNeg = true;
-					}
+
 				}
-				for (Long vertex : b) {
-					if (otherPair.getPos().contains(vertex)) {
-						bInPos = true;
-					}
-					if (otherPair.getNeg().contains(vertex)) {
-						bInNeg = true;
-					}
-				}
-
-				// Failure
-				boolean failure = (aInPos && aInNeg) || (bInPos && bInNeg)
-						|| (aInPos && bInPos) || (aInNeg && bInNeg);
-				if (failure) {
-					continue;
-				}
-
-				allFailed = false;
-
-				// Disjoint sets
-				boolean disjoint = !(aInPos || aInNeg || bInPos || bInNeg);
-				if (disjoint) {
-					// Save all possibilities to the pool
-					SetPair oldPair = otherPair.copy();
-					SetPair newPair = otherPair.copy();
-
-					oldPair.getPos().addAll(a);
-					oldPair.getNeg().addAll(b);
-
-					newPair.getPos().addAll(b);
-					newPair.getNeg().addAll(a);
-
-					// Update the pool
-					// No need to add newPair to the pool later on
-					removeFromPool(inputId, pair);
-					removeFromPool(inputId, otherPair);
-
-					addToPool(inputId, oldPair);
-					addToPool(inputId, newPair);
-
-					// Emit them as well
-					collectPair(out, oldPair);
-					collectPair(out, newPair);
-					continue;
-				}
-
-				// Resolvable sets
-				SetPair newPair = otherPair.copy();
-
-				if (aInPos || bInNeg) {
-					newPair.getPos().addAll(a);
-					newPair.getNeg().addAll(b);
-				} else {
-					newPair.getPos().addAll(b);
-					newPair.getNeg().addAll(a);
-				}
-
-				collectPair(out, newPair);
 			}
 
 			if (allFailed) {
-				collectPair(out, null);
+				return null;
+			}
+
+			pool.update();
+			return diff;
+		}
+
+		private Matching evaluate(SetPair oldPair, SetPair newPair) {
+
+			Set<Long> pos = newPair.getPos();
+			Set<Long> neg = newPair.getNeg();
+
+			boolean posInPos = false;
+			boolean posInNeg = false;
+			boolean negInPos = false;
+			boolean negInNeg = false;
+
+			for (Long vertex : pos) {
+				posInPos |= oldPair.getPos().contains(vertex);
+				posInNeg |= oldPair.getNeg().contains(vertex);
+			}
+			for (Long vertex : neg) {
+				negInPos |= oldPair.getPos().contains(vertex);
+				negInNeg |= oldPair.getNeg().contains(vertex);
+			}
+
+			// Check for failures
+			boolean failure = (posInPos && posInNeg) || (negInPos && negInNeg)
+					|| (posInPos && negInPos) || (posInNeg && negInNeg);
+			if (failure) {
+				return Matching.Failed;
+			}
+
+			// Check for disjoint sets
+			boolean disjoint = !posInPos && !posInNeg && !negInPos && !negInNeg;
+			if (disjoint) {
+				return Matching.Disjoint;
+			}
+
+			if (posInPos || negInNeg) {
+				return Matching.Normal;
+			}
+
+			return Matching.Reversed;
+		}
+
+		private void fail(Collector<Candidate> out) {
+			Set<SetPair> empty = new HashSet<>();
+			out.collect(new Candidate(self, empty, false));
+		}
+	}
+
+	private static final class CandidatePool extends HashMap<Long, Set<SetPair>> {
+
+		private Map<Long, Set<SetPair>> toAdd;
+		private Map<Long, Set<SetPair>> toRemove;
+
+		public CandidatePool() {
+			toAdd = new HashMap<>();
+			toRemove = new HashMap<>();
+		}
+
+		public void addAll(long key, Set<SetPair> values) {
+			for (SetPair pair : values) {
+				this.add(key, pair);
 			}
 		}
 
-		private boolean optimizePool(long inputId, SetPair pair) {
-
-			if (!pool.containsKey(inputId)) {
-				pool.put(inputId, new ConcurrentSet<SetPair>());
+		public void add(long key, SetPair value) {
+			if (!toAdd.containsKey(key)) {
+				toAdd.put(key, new HashSet<SetPair>());
 			}
-
-			// Run optimizations on the pool entries from the same mapper
-			ConcurrentSet<SetPair> selfPool = pool.get(inputId);
-
-			// Check if the new set-pair is a superset of an old entry
-			// In this case, old data can be removed from the pool
-			for (SetPair otherPair : selfPool) {
-				boolean posInPos = pair.getPos().containsAll(otherPair.getPos())
-						&& pair.getNeg().containsAll(otherPair.getNeg());
-				boolean negInNeg = pair.getPos().containsAll(otherPair.getNeg())
-						&& pair.getNeg().containsAll(otherPair.getPos());
-
-				if (posInPos || negInNeg) {
-					selfPool.remove(otherPair);
-				}
-			}
-
-			// Check if the old data contains a superset of the new
-			// In this case, the new data should not be processed at all
-			boolean skip = false;
-
-			for (SetPair otherPair : selfPool) {
-				boolean PosInPos = otherPair.getPos().containsAll(pair.getPos())
-						&& otherPair.getNeg().containsAll(pair.getNeg());
-				boolean NegInNeg = otherPair.getNeg().containsAll(pair.getPos())
-						&& otherPair.getPos().containsAll(pair.getNeg());
-
-				if (PosInPos || NegInNeg) {
-					skip = true;
-					break;
-				}
-			}
-
-			return skip;
+			toAdd.get(key).add(value);
 		}
 
-		private void addToPool(long inputId, SetPair pair) {
-			if (!addedPairs.containsKey(inputId)) {
-				addedPairs.put(inputId, new ConcurrentSet<SetPair>());
+		public void remove(long key, SetPair value) {
+			if (!toRemove.containsKey(key)) {
+				toRemove.put(key, new HashSet<SetPair>());
 			}
-
-			addedPairs.get(inputId).add(pair);
+			toRemove.get(key).add(value);
 		}
 
-		private void removeFromPool(long inputId, SetPair pair) {
-			if (!removedPairs.containsKey(inputId)) {
-				removedPairs.put(inputId, new ConcurrentSet<SetPair>());
-			}
-
-			removedPairs.get(inputId).add(pair);
-		}
-
-		private void updatePool() {
-
-			// Execute additions
-			for (Map.Entry<Long, ConcurrentSet<SetPair>> e : addedPairs.entrySet()) {
-				if (!pool.containsKey(e.getKey())) {
-					pool.put(e.getKey(), new ConcurrentSet<SetPair>());
-				}
-
-				for (SetPair pair : e.getValue()) {
-					pool.get(e.getKey()).add(pair);
-				}
-			}
+		public void update() {
 
 			// Execute removals
-			for (Map.Entry<Long, ConcurrentSet<SetPair>> e : removedPairs.entrySet()) {
-				if (!pool.containsKey(e.getKey())) {
+			for (Map.Entry<Long, Set<SetPair>> e : toRemove.entrySet()) {
+				long key = e.getKey();
+				if (!this.containsKey(key)) {
 					continue;
 				}
 
 				for (SetPair pair : e.getValue()) {
-					pool.get(e.getKey()).remove(pair);
+					this.get(key).remove(pair);
 				}
 			}
-		}
+			// Execute additions
+			for (Map.Entry<Long, Set<SetPair>> e : toAdd.entrySet()) {
+				long key = e.getKey();
+				if (!this.containsKey(key)) {
+					this.put(key, new HashSet<SetPair>());
+				}
 
-		private void collectPair(Collector<Tuple3<Long, SetPair, Boolean>> out, SetPair pair) {
-			SetPair result = pair;
-			Boolean success = true;
-
-			if (result == null) {
-				Set<Long> empty = new HashSet<>();
-				result = new SetPair(empty, empty);
-
-				success = false;
+				for (SetPair pair : e.getValue()) {
+					this.get(key).add(pair);
+				}
 			}
 
-			out.collect(new Tuple3<>(id, result, success));
+			toAdd.clear();
+			toRemove.clear();
 		}
 
+		public long otherKey(long key) throws Exception {
+			for (long otherKey : this.keySet()) {
+				if (otherKey != key) {
+					return otherKey;
+				}
+			}
+			throw new KeyNotFoundException("No other key");
+		}
+
+		private static final class KeyNotFoundException extends Exception {
+			public KeyNotFoundException(String msg) {
+				super(msg);
+			}
+		}
 	}
 
-	private static final class MergeTreeKeySelector
-			implements KeySelector<Tuple3<Long, SetPair, Boolean>, Long> {
+	private static final class MergeTreeKeySelector implements KeySelector<Candidate, Long> {
 
 		private int level;
 
@@ -355,15 +367,15 @@ public class BipartiteMergeTreeExample {
 		}
 
 		@Override
-		public Long getKey(Tuple3<Long, SetPair, Boolean> input) throws Exception {
+		public Long getKey(Candidate input) throws Exception {
 			return input.f0 >> (level + 1);
 		}
 	}
 
 	private static final class InitialSetMapper implements
-			MapFunction<Edge<Long,NullValue>, Tuple3<Long, SetPair, Boolean>> {
+			MapFunction<Edge<Long,NullValue>, Candidate> {
 		@Override
-		public Tuple3<Long, SetPair, Boolean> map(Edge<Long, NullValue> edge) throws Exception {
+		public Candidate map(Edge<Long, NullValue> edge) throws Exception {
 			Set<Long> pos = new HashSet<>();
 			Set<Long> neg = new HashSet<>();
 
@@ -371,11 +383,10 @@ public class BipartiteMergeTreeExample {
 			neg.add(edge.getTarget());
 
 			SetPair pair = new SetPair(pos, neg);
+			Set<SetPair> set = new HashSet<>();
+			set.add(pair);
 
-			// -1 indicates that this is the first level of merging
-			// in this case, set-pairs have one element each, and need to be merged, even though they have the same id
-			// as such, set-pairs with this "special" id can be merged in MergeTreeMapper
-			return new Tuple3<>(-1L, pair, true);
+			return new Candidate(0L, set, true);
 		}
 	}
 

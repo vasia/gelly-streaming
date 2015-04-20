@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example;
+package org.apache.flink.graph.streaming.example.utils;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 

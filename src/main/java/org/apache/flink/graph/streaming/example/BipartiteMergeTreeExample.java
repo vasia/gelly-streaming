@@ -24,8 +24,11 @@ import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.example.utils.Candidate;
 import org.apache.flink.graph.streaming.example.utils.SetPair;
+import org.apache.flink.runtime.plugable.SerializationDelegate;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
+import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
@@ -42,11 +45,11 @@ public class BipartiteMergeTreeExample {
 	public BipartiteMergeTreeExample() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
-		// Generate a pseudo-random stream of 2048 edges
+		// Generate a pseudo-random stream of edges
 		Random rnd = new Random(0xDEADBEEF);
 
 		List<Integer> vertices = new ArrayList<>();
-		for (int i = 0; i < 10; ++i) {
+		for (int i = 0; i < 20; ++i) {
 			vertices.add(i * 2 + 1);
 		}
 
@@ -74,7 +77,7 @@ public class BipartiteMergeTreeExample {
 					}
 				});
 
-		edges
+		edges.setConnectionType(new InitialPartitioner(StreamPartitioner.PartitioningStrategy.GLOBAL))
 				.map(new InitialSetMapper())
 				.flatMap(new MergeTreeMapper())
 				.groupBy(new MergeTreeKeySelector(0))
@@ -107,8 +110,6 @@ public class BipartiteMergeTreeExample {
 			long id = input.f0;
 			Set<SetPair> pairs = input.f1;
 			boolean failure = !input.f2;
-
-			// System.out.println("@" + self + ", from: " + id + " -> " + pairs + ", pool: " + pool);
 
 			// If a failure was already found, propagate it
 			if (failure) {
@@ -176,9 +177,7 @@ public class BipartiteMergeTreeExample {
 
 				for (SetPair oldPair : pool.get(key)) {
 
-					// System.out.println("Comparing " + oldPair + " vs " + newPair);
 					Matching result = evaluate(oldPair, newPair);
-					// System.out.println("Result: " + result.name());
 
 					switch (result) {
 						case Failed:
@@ -372,8 +371,7 @@ public class BipartiteMergeTreeExample {
 		}
 	}
 
-	private static final class InitialSetMapper implements
-			MapFunction<Edge<Long,NullValue>, Candidate> {
+	private static final class InitialSetMapper implements MapFunction<Edge<Long,NullValue>, Candidate> {
 		@Override
 		public Candidate map(Edge<Long, NullValue> edge) throws Exception {
 			Set<Long> pos = new HashSet<>();
@@ -389,6 +387,49 @@ public class BipartiteMergeTreeExample {
 			return new Candidate(0L, set, true);
 		}
 	}
+
+	private static final class InitialPartitioner extends StreamPartitioner<Edge<Long, NullValue>> {
+
+		private HashMap<Long, Set<Long>> history;
+
+		public InitialPartitioner(PartitioningStrategy strategy) {
+			super(strategy);
+
+			history = new HashMap<>();
+		}
+
+		@Override
+		public int[] selectChannels(SerializationDelegate<StreamRecord<Edge<Long, NullValue>>> edge, int i) {
+
+			int result[] = new int[1];
+
+			long src = (long) edge.getInstance().getField(0);
+			long trg = (long) edge.getInstance().getField(1);
+
+			for (Map.Entry<Long, Set<Long>> entry : history.entrySet()) {
+				long key = entry.getKey();
+				Set<Long> vertices = entry.getValue();
+				if (vertices.contains(src) && vertices.contains(trg)) {
+					result[0] = (int) key;
+					return result;
+				}
+			}
+
+			for (Map.Entry<Long, Set<Long>> entry : history.entrySet()) {
+				long key = entry.getKey();
+				Set<Long> vertices = entry.getValue();
+				if (vertices.contains(src) || vertices.contains(trg)) {
+					result[0] = (int) key;
+					return result;
+				}
+			}
+
+			result[0] = new Random().nextInt(i);
+			return result;
+		}
+	}
+
+
 
 	public static void main(String[] args) throws Exception {
 		new BipartiteMergeTreeExample();

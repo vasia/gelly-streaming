@@ -18,10 +18,8 @@
 
 package org.apache.flink.graph.streaming.example.utils;
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 
-import java.util.HashSet;
 import java.util.Set;
 
 public final class Candidate extends Tuple3<Long, Set<SetPair>, Boolean> {

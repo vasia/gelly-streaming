@@ -20,36 +20,23 @@ package org.apache.flink.graph.streaming.example.utils;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 
-import java.util.HashSet;
-import java.util.Set;
+public class SignedVertex extends Tuple2<Long, Boolean> {
 
-public final class SetPair extends Tuple2<Set<Long>, Set<Long>> {
+	public SignedVertex() {}
 
-	public SetPair() {
-		super();
+	public SignedVertex(long vertex, boolean sign) {
+		super(vertex, sign);
 	}
 
-	public SetPair(Set<Long> pos, Set<Long> neg) {
-		this.f0 = pos;
-		this.f1 = neg;
-	}
-
-	public Set<Long> getPos() {
+	public long getVertex() {
 		return this.f0;
 	}
 
-	public Set<Long> getNeg() {
+	public boolean getSign() {
 		return this.f1;
 	}
 
-	@Override
-	public SetPair copy() {
-		Set<Long> pos = new HashSet<>();
-		pos.addAll(this.f0);
-
-		Set<Long> neg = new HashSet<>();
-		neg.addAll(this.f1);
-
-		return new SetPair(pos, neg);
+	public SignedVertex reverse() {
+		return new SignedVertex(this.getVertex(), !this.getSign());
 	}
 }

@@ -19,30 +19,27 @@
 package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.RichFlatMapFunction;
+import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.example.utils.Candidate;
-import org.apache.flink.graph.streaming.example.utils.SetPair;
+import org.apache.flink.graph.streaming.example.utils.SignedVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
-import org.apache.flink.util.Collector;
 
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import java.util.Set;
 
 public class BipartiteMergeTreeExample {
 
 	public BipartiteMergeTreeExample() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
-		// Generate a pseudo-random stream of 2048 edges
+		// Generate a pseudo-random stream of edges
 		Random rnd = new Random(0xDEADBEEF);
 
 		List<Integer> vertices = new ArrayList<>();
@@ -75,291 +72,156 @@ public class BipartiteMergeTreeExample {
 				});
 
 		edges
-				.map(new InitialSetMapper())
-				.flatMap(new MergeTreeMapper())
+				.map(new InitCandidateMapper())
+				.map(new BipartitenessMapper())
 				.groupBy(new MergeTreeKeySelector(0))
-				.flatMap(new MergeTreeMapper())
+				.map(new BipartitenessMapper())
 				.groupBy(new MergeTreeKeySelector(1))
-				.flatMap(new MergeTreeMapper())
+				.map(new BipartitenessMapper())
 				.print();
 
 		env.execute("Distributed Merge Tree Sandbox");
 	}
 
-	private static final class MergeTreeMapper extends RichFlatMapFunction<Candidate, Candidate> {
-
-		private enum Matching {
-			Failed, Disjoint, Normal, Reversed
-		}
-
-		private CandidatePool pool;
-		private long self;
-
-		public MergeTreeMapper() {
-			pool = new CandidatePool();
-		}
+	private static final class BipartitenessMapper extends RichMapFunction<Candidate, Candidate> {
+		private Candidate candidate = null;
+		private boolean failed = false;
+		private int self;
 
 		@Override
-		public void flatMap(Candidate input, Collector<Candidate> out) throws Exception {
-
+		public Candidate map(Candidate input) throws Exception {
 			self = getRuntimeContext().getIndexOfThisSubtask();
 
-			long id = input.f0;
-			Set<SetPair> pairs = input.f1;
-			boolean failure = !input.f2;
-
-			// System.out.println("@" + self + ", from: " + id + " -> " + pairs + ", pool: " + pool);
-
-			// If a failure was already found, propagate it
-			if (failure) {
-				fail(out);
-				return;
+			// Propagate failure
+			if (!input.getSuccess() || failed) {
+				return fail();
 			}
 
-			// If the pool is empty, just return the set-pair and add the new pair to the pool
-			if (pool.isEmpty()) {
-				pool.addAll(id, pairs);
-				pool.update();
-
-				out.collect(new Candidate(self, pairs, true));
-				return;
+			// Store and forward the first candidate
+			if (candidate == null) {
+				candidate = new Candidate(self, true, input);
+				return candidate;
 			}
 
-			Set<SetPair> diff;
+			// Compare each input component with each candidate component and merge accordingly
+			for (Map.Entry<Long, Map<Long, SignedVertex>> inEntry : input.getMap().entrySet()) {
 
-			if (!pool.containsKey(id)) {
-				pool.addAll(id, pairs);
-				pool.update();
+				List<Long> mergeWith = new ArrayList<>();
+				for (Map.Entry<Long, Map<Long, SignedVertex>> selfEntry : candidate.getMap().entrySet()) {
+					long selfKey = selfEntry.getKey();
 
-				diff = pairs;
-
-			} else {
-				// Combine the new set-pair with the same part of the pool
-				diff = combine(id, pairs);
-			}
-
-			// Check for failure
-			if (diff == null) {
-				fail(out);
-				return;
-			}
-
-			// Find the other part of the pool
-			long otherId;
-			try {
-				otherId = pool.otherKey(id);
-			} catch (CandidatePool.KeyNotFoundException e) {
-				// If it doesn't exist, collect the result of combine
-				out.collect(new Candidate(self, diff, true));
-				return;
-			}
-
-			// Combine the new set-pair with the other part of the pool
-			diff = combine(otherId, diff);
-
-			if (diff == null) {
-				fail(out);
-				return;
-			}
-
-			out.collect(new Candidate(self, diff, true));
-		}
-
-		private Set<SetPair> combine(long key, Set<SetPair> newSet) {
-
-			Set<SetPair> diff = new HashSet<>();
-			boolean allFailed = true;
-
-			for (SetPair newPair : newSet) {
-				Set<Long> pos = newPair.getPos();
-				Set<Long> neg = newPair.getNeg();
-
-				for (SetPair oldPair : pool.get(key)) {
-
-					// System.out.println("Comparing " + oldPair + " vs " + newPair);
-					Matching result = evaluate(oldPair, newPair);
-					// System.out.println("Result: " + result.name());
-
-					switch (result) {
-						case Failed:
-							pool.remove(key, oldPair);
-							break;
-						case Disjoint:
-							allFailed = false;
-
-							// Create all possibilities
-							SetPair pairOne = oldPair.copy();
-							SetPair pairTwo = oldPair.copy();
-
-							pairOne.getPos().addAll(pos);
-							pairOne.getNeg().addAll(neg);
-
-							pairTwo.getPos().addAll(neg);
-							pairTwo.getNeg().addAll(pos);
-
-							// Update the pool
-							pool.remove(key, oldPair);
-							pool.add(key, pairOne);
-							pool.add(key, pairTwo);
-
-							diff.add(pairOne);
-							diff.add(pairTwo);
-							break;
-
-						case Normal:
-						case Reversed:
-							allFailed = false;
-
-							SetPair pair = oldPair.copy();
-							if (result.equals(Matching.Normal)) {
-								// Resolve pos -> pos, neg -> neg
-								pair.getPos().addAll(pos);
-								pair.getNeg().addAll(neg);
-							} else {
-								// Resolve pos -> neg, neg -> pos
-								pair.getPos().addAll(neg);
-								pair.getNeg().addAll(pos);
+					// Find vertices of input component in the candidate component
+					for (long inVertex : inEntry.getValue().keySet()) {
+						if (selfEntry.getValue().containsKey(inVertex)) {
+							if (!mergeWith.contains(selfKey)) {
+								mergeWith.add(selfKey);
 							}
+						}
+					}
+				}
 
-							pool.remove(key, oldPair);
-							pool.add(key, pair);
-							diff.add(pair);
-							break;
+				if (mergeWith.isEmpty()) {
+					// If the input component is disjoint from all components of the candidate,
+					// simply add that component
+					candidate.add(inEntry.getKey(), inEntry.getValue());
+				} else {
+					// Merge the input with the lowest id component in candidate
+					Collections.sort(mergeWith);
+					long firstKey = mergeWith.get(0);
+					boolean success;
+
+					success = merge(input, inEntry.getKey(), firstKey);
+					if (!success) {
+						return fail();
 					}
 
+					// Merge other components of candidate into the lowest id component
+					for (int i = 1; i < mergeWith.size(); ++i) {
+						success = merge(candidate, mergeWith.get(i), firstKey);
+						if (!success) {
+							fail();
+						}
+
+						candidate.getMap().remove(mergeWith.get(i));
+					}
 				}
 			}
 
-			if (allFailed) {
-				return null;
-			}
-
-			pool.update();
-			return diff;
+			return candidate;
 		}
 
-		private Matching evaluate(SetPair oldPair, SetPair newPair) {
+		private void union() {
 
-			Set<Long> pos = newPair.getPos();
-			Set<Long> neg = newPair.getNeg();
-
-			boolean posInPos = false;
-			boolean posInNeg = false;
-			boolean negInPos = false;
-			boolean negInNeg = false;
-
-			for (Long vertex : pos) {
-				posInPos |= oldPair.getPos().contains(vertex);
-				posInNeg |= oldPair.getNeg().contains(vertex);
-			}
-			for (Long vertex : neg) {
-				negInPos |= oldPair.getPos().contains(vertex);
-				negInNeg |= oldPair.getNeg().contains(vertex);
-			}
-
-			// Check for failures
-			boolean failure = (posInPos && posInNeg) || (negInPos && negInNeg)
-					|| (posInPos && negInPos) || (posInNeg && negInNeg);
-			if (failure) {
-				return Matching.Failed;
-			}
-
-			// Check for disjoint sets
-			boolean disjoint = !posInPos && !posInNeg && !negInPos && !negInNeg;
-			if (disjoint) {
-				return Matching.Disjoint;
-			}
-
-			if (posInPos || negInNeg) {
-				return Matching.Normal;
-			}
-
-			return Matching.Reversed;
 		}
 
-		private void fail(Collector<Candidate> out) {
-			Set<SetPair> empty = new HashSet<>();
-			out.collect(new Candidate(self, empty, false));
+		private boolean merge(Candidate input, long inputKey, long selfKey) throws Exception {
+			Map<Long, SignedVertex> inputComponent = input.getMap().get(inputKey);
+			Map<Long, SignedVertex> selfComponent = candidate.getMap().get(selfKey);
+
+			// Find the vertices to merge along
+			List<Long> mergeBy = new ArrayList<>();
+
+			for (long inputVertex : inputComponent.keySet()) {
+				for (long selfVertex : selfComponent.keySet()) {
+					if (inputVertex == selfVertex) {
+						mergeBy.add(inputVertex);
+					}
+				}
+			}
+
+			// Determine if the merge should be with reversed signs or not
+			boolean inputSign = inputComponent.get(mergeBy.get(0)).getSign();
+			boolean selfSign = selfComponent.get(mergeBy.get(0)).getSign();
+			boolean reversed = inputSign != selfSign;
+
+			// Evaluate the merge
+			boolean success = true;
+			for (long mergeVertex : mergeBy) {
+				inputSign = inputComponent.get(mergeVertex).getSign();
+				selfSign = selfComponent.get(mergeVertex).getSign();
+				if (reversed) {
+					success = inputSign != selfSign;
+				} else {
+					success = inputSign == selfSign;
+				}
+				if (!success) {
+					break;
+				}
+			}
+
+			// Could not merge candidates
+			if (!success) {
+				return false;
+			}
+
+			// Execute the merge
+			long commonKey = Math.min(inputKey, selfKey);
+			long removedKey = Math.max(inputKey, selfKey);
+
+			// Merge input vertices
+			success = true;
+			for (SignedVertex inputVertex : inputComponent.values()) {
+
+				if (reversed) {
+					success = candidate.add(commonKey, inputVertex.reverse());
+				} else {
+					success = candidate.add(commonKey, inputVertex);
+				}
+				if (!success) {
+					break;
+				}
+			}
+
+			return success;
+		}
+
+		private Candidate fail() {
+			failed = true;
+			return new Candidate(self, false);
 		}
 	}
 
-	private static final class CandidatePool extends HashMap<Long, Set<SetPair>> {
-
-		private Map<Long, Set<SetPair>> toAdd;
-		private Map<Long, Set<SetPair>> toRemove;
-
-		public CandidatePool() {
-			toAdd = new HashMap<>();
-			toRemove = new HashMap<>();
-		}
-
-		public void addAll(long key, Set<SetPair> values) {
-			for (SetPair pair : values) {
-				this.add(key, pair);
-			}
-		}
-
-		public void add(long key, SetPair value) {
-			if (!toAdd.containsKey(key)) {
-				toAdd.put(key, new HashSet<SetPair>());
-			}
-			toAdd.get(key).add(value);
-		}
-
-		public void remove(long key, SetPair value) {
-			if (!toRemove.containsKey(key)) {
-				toRemove.put(key, new HashSet<SetPair>());
-			}
-			toRemove.get(key).add(value);
-		}
-
-		public void update() {
-
-			// Execute removals
-			for (Map.Entry<Long, Set<SetPair>> e : toRemove.entrySet()) {
-				long key = e.getKey();
-				if (!this.containsKey(key)) {
-					continue;
-				}
-
-				for (SetPair pair : e.getValue()) {
-					this.get(key).remove(pair);
-				}
-			}
-			// Execute additions
-			for (Map.Entry<Long, Set<SetPair>> e : toAdd.entrySet()) {
-				long key = e.getKey();
-				if (!this.containsKey(key)) {
-					this.put(key, new HashSet<SetPair>());
-				}
-
-				for (SetPair pair : e.getValue()) {
-					this.get(key).add(pair);
-				}
-			}
-
-			toAdd.clear();
-			toRemove.clear();
-		}
-
-		public long otherKey(long key) throws Exception {
-			for (long otherKey : this.keySet()) {
-				if (otherKey != key) {
-					return otherKey;
-				}
-			}
-			throw new KeyNotFoundException("No other key");
-		}
-
-		private static final class KeyNotFoundException extends Exception {
-			public KeyNotFoundException(String msg) {
-				super(msg);
-			}
-		}
-	}
-
-	private static final class MergeTreeKeySelector implements KeySelector<Candidate, Long> {
-
+	private static final class MergeTreeKeySelector implements KeySelector<Candidate, Integer> {
 		private int level;
 
 		public MergeTreeKeySelector(int level) {
@@ -367,26 +229,23 @@ public class BipartiteMergeTreeExample {
 		}
 
 		@Override
-		public Long getKey(Candidate input) throws Exception {
-			return input.f0 >> (level + 1);
+		public Integer getKey(Candidate input) throws Exception {
+			return input.getSource() >> (level + 1);
 		}
 	}
 
-	private static final class InitialSetMapper implements
+	private static final class InitCandidateMapper implements
 			MapFunction<Edge<Long,NullValue>, Candidate> {
 		@Override
 		public Candidate map(Edge<Long, NullValue> edge) throws Exception {
-			Set<Long> pos = new HashSet<>();
-			Set<Long> neg = new HashSet<>();
+			long src = Math.min(edge.getSource(), edge.getTarget());
+			long trg = Math.max(edge.getSource(), edge.getTarget());
 
-			pos.add(edge.getSource());
-			neg.add(edge.getTarget());
+			Candidate candidate = new Candidate(0, true);
+			candidate.add(src, new SignedVertex(src, true));
+			candidate.add(src, new SignedVertex(trg, false));
 
-			SetPair pair = new SetPair(pos, neg);
-			Set<SetPair> set = new HashSet<>();
-			set.add(pair);
-
-			return new Candidate(0L, set, true);
+			return candidate;
 		}
 	}
 

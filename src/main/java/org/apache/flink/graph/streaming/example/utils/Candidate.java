@@ -18,33 +18,68 @@
 
 package org.apache.flink.graph.streaming.example.utils;
 
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.Map;
+import java.util.TreeMap;
 
-public final class Candidate extends Tuple3<Long, Set<SetPair>, Boolean> {
+public class Candidate extends Tuple3<Integer, Boolean, TreeMap<Long, Map<Long, SignedVertex>>> {
 
-	public Candidate() {
-		super();
+	public Candidate() {}
+
+	public Candidate(int source, boolean success) {
+		this.f0 = source;
+		this.f1 = success;
+		this.f2 = new TreeMap<>();
 	}
 
-	public Candidate(long id, Set<SetPair> pairs, boolean success) {
-		this.f0 = id;
-		this.f1 = pairs;
-		this.f2 = success;
+	public Candidate(int source, boolean success, TreeMap<Long, Map<Long, SignedVertex>> map) {
+		this.f0 = source;
+		this.f1 = success;
+		this.f2 = map;
 	}
 
-	public long getId() {
+	public Candidate(int source, boolean success, Candidate input) throws Exception {
+		this(source, success);
+
+		for (Map.Entry<Long, Map<Long, SignedVertex>> entry : input.getMap().entrySet()) {
+			this.add(entry.getKey(), entry.getValue());
+		}
+	}
+
+	public int getSource() {
 		return this.f0;
 	}
 
-	public Set<SetPair> getSetPairs() {
+	public boolean getSuccess() {
 		return this.f1;
 	}
 
-	public boolean getSuccess() {
+	public TreeMap<Long, Map<Long, SignedVertex>> getMap() {
 		return this.f2;
+	}
+
+	public boolean add(long component, Map<Long, SignedVertex> vertices) throws Exception {
+		for (SignedVertex vertex : vertices.values()) {
+			if (!this.add(component, vertex)) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	public boolean add(long component, SignedVertex vertex) throws Exception {
+		if (!this.getMap().containsKey(component)) {
+			this.getMap().put(component, new TreeMap<Long, SignedVertex>());
+		}
+		if (this.getMap().get(component).containsKey(vertex.getVertex())) {
+			SignedVertex storedVertex = this.getMap().get(component).get(vertex.getVertex());
+			if (storedVertex.getSign() != vertex.getSign()) {
+				return false;
+			}
+		}
+		this.getMap().get(component).put(vertex.getVertex(), vertex);
+
+		return true;
 	}
 }

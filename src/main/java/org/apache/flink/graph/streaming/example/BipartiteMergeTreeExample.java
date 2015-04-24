@@ -18,6 +18,7 @@
 
 package org.apache.flink.graph.streaming.example;
 
+import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.java.functions.KeySelector;
@@ -32,41 +33,21 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 
 public class BipartiteMergeTreeExample {
 
 	public BipartiteMergeTreeExample() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
-		// Generate a pseudo-random stream of edges
-		Random rnd = new Random(0xDEADBEEF);
-
-		List<Integer> vertices = new ArrayList<>();
-		for (int i = 0; i < 10; ++i) {
-			vertices.add(i * 2 + 1);
-		}
-
-		List<String> edgeList = new ArrayList<>();
-		while (!vertices.isEmpty()) {
-
-			int id = rnd.nextInt(vertices.size());
-			int vertex = vertices.remove(id);
-
-			edgeList.add(String.format("%d,%d", vertex, vertex + 1));
-			edgeList.add(String.format("%d,%d", vertex, vertex + 3));
-		}
-
-		// Add this edge to make it fail
-		// edgeList.add("5,17");
-
-		DataStream<Edge<Long, NullValue>> edges = env.fromCollection(edgeList)
+		// Source: http://grouplens.org/datasets/movielens/
+		DataStream<Edge<Long, NullValue>> edges = env
+				.readTextFile("movielens_sorted.txt")
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
-						String[] args = s.split(",");
+						String[] args = s.split("\t");
 						long src = Long.parseLong(args[0]);
-						long trg = Long.parseLong(args[1]);
+						long trg = Long.parseLong(args[1]) + 10000;
 						return new Edge<>(src, trg, NullValue.getInstance());
 					}
 				});
@@ -77,10 +58,11 @@ public class BipartiteMergeTreeExample {
 				.groupBy(new MergeTreeKeySelector(0))
 				.map(new BipartitenessMapper())
 				.groupBy(new MergeTreeKeySelector(1))
-				.map(new BipartitenessMapper())
-				.print();
+				.map(new BipartitenessMapper());
 
-		env.execute("Distributed Merge Tree Sandbox");
+		JobExecutionResult res = env.execute("Distributed Merge Tree Sandbox");
+		long runtime = res.getNetRuntime();
+		System.out.println("Runtime: " + runtime);
 	}
 
 	private static final class BipartitenessMapper extends RichMapFunction<Candidate, Candidate> {
@@ -150,10 +132,6 @@ public class BipartiteMergeTreeExample {
 			return candidate;
 		}
 
-		private void union() {
-
-		}
-
 		private boolean merge(Candidate input, long inputKey, long selfKey) throws Exception {
 			Map<Long, SignedVertex> inputComponent = input.getMap().get(inputKey);
 			Map<Long, SignedVertex> selfComponent = candidate.getMap().get(selfKey);
@@ -162,10 +140,8 @@ public class BipartiteMergeTreeExample {
 			List<Long> mergeBy = new ArrayList<>();
 
 			for (long inputVertex : inputComponent.keySet()) {
-				for (long selfVertex : selfComponent.keySet()) {
-					if (inputVertex == selfVertex) {
-						mergeBy.add(inputVertex);
-					}
+				if (selfComponent.containsKey(inputVertex)) {
+					mergeBy.add(inputVertex);
 				}
 			}
 
@@ -196,7 +172,6 @@ public class BipartiteMergeTreeExample {
 
 			// Execute the merge
 			long commonKey = Math.min(inputKey, selfKey);
-			long removedKey = Math.max(inputKey, selfKey);
 
 			// Merge input vertices
 			success = true;

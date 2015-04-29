@@ -38,16 +38,17 @@ public class BipartiteMergeTreeExample {
 
 	public BipartiteMergeTreeExample() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
+		env.setParallelism(4);
 
 		// Source: http://grouplens.org/datasets/movielens/
 		DataStream<Edge<Long, NullValue>> edges = env
-				.readTextFile("movielens_sorted.txt")
+				.readTextFile("movielens_10k_sorted.txt")
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
 						String[] args = s.split("\t");
 						long src = Long.parseLong(args[0]);
-						long trg = Long.parseLong(args[1]) + 10000;
+						long trg = Long.parseLong(args[1]) + 1000000;
 						return new Edge<>(src, trg, NullValue.getInstance());
 					}
 				});
@@ -92,11 +93,18 @@ public class BipartiteMergeTreeExample {
 				for (Map.Entry<Long, Map<Long, SignedVertex>> selfEntry : candidate.getMap().entrySet()) {
 					long selfKey = selfEntry.getKey();
 
+					// If the two components are exactly the same, skip them
+					if (inEntry.getValue().keySet().containsAll(selfEntry.getValue().keySet())
+							&& selfEntry.getValue().keySet().containsAll(inEntry.getValue().keySet())) {
+						continue;
+					}
+
 					// Find vertices of input component in the candidate component
 					for (long inVertex : inEntry.getValue().keySet()) {
 						if (selfEntry.getValue().containsKey(inVertex)) {
 							if (!mergeWith.contains(selfKey)) {
 								mergeWith.add(selfKey);
+								break;
 							}
 						}
 					}
@@ -161,20 +169,14 @@ public class BipartiteMergeTreeExample {
 					success = inputSign == selfSign;
 				}
 				if (!success) {
-					break;
+					return false;
 				}
-			}
-
-			// Could not merge candidates
-			if (!success) {
-				return false;
 			}
 
 			// Execute the merge
 			long commonKey = Math.min(inputKey, selfKey);
 
 			// Merge input vertices
-			success = true;
 			for (SignedVertex inputVertex : inputComponent.values()) {
 
 				if (reversed) {
@@ -183,11 +185,11 @@ public class BipartiteMergeTreeExample {
 					success = candidate.add(commonKey, inputVertex);
 				}
 				if (!success) {
-					break;
+					return false;
 				}
 			}
 
-			return success;
+			return true;
 		}
 
 		private Candidate fail() {

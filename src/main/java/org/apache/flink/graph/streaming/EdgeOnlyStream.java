@@ -33,7 +33,9 @@ import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -49,6 +51,11 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 
 	private final StreamExecutionEnvironment context;
 	private final DataStream<Edge<K, EV>> edges;
+	private final GraphConfiguration configuration;
+
+	private final DataStream<Vertex<K, Long>> degrees;
+	private final DataStream<Vertex<K, Long>> inDegrees;
+	private final DataStream<Vertex<K, Long>> outDegrees;
 
 	/**
 	 * Creates a graph from an edge stream
@@ -59,6 +66,93 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 	public EdgeOnlyStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context) {
 		this.edges = edges;
 		this.context = context;
+		this.configuration = new GraphConfiguration();
+
+		this.degrees = null;
+		this.inDegrees = null;
+		this.outDegrees = null;
+	}
+
+	/**
+	 * Creates a graph from an edge stream, with a custom configuration
+	 *
+	 * @param edges a DataStream of edges.
+	 * @param context the flink execution environment.
+	 * @param configuration the custom properties of the streamed graph.
+	 */
+	public EdgeOnlyStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context,
+			GraphConfiguration configuration) {
+		this.edges = edges;
+		this.context = context;
+		this.configuration = configuration;
+
+		if (this.configuration.getCollectDegrees()) {
+			this.degrees = this.edges
+					.flatMap(new DegreeTypeSeparator<K, EV>(true, true))
+					.groupBy(0)
+					.map(new DegreeMapFunction<K>());
+		} else {
+			this.degrees = null;
+		}
+
+		if (this.configuration.getCollectInDegrees()) {
+			this.inDegrees = this.edges
+					.flatMap(new DegreeTypeSeparator<K, EV>(true, false))
+					.groupBy(0)
+					.map(new DegreeMapFunction<K>());
+		} else {
+			this.inDegrees = null;
+		}
+
+		if (this.configuration.getCollectOutDegrees()) {
+			this.outDegrees = this.edges
+					.flatMap(new DegreeTypeSeparator<K, EV>(false, true))
+					.groupBy(0)
+					.map(new DegreeMapFunction<K>());
+		} else {
+			this.outDegrees = null;
+		}
+	}
+
+	private static final class DegreeTypeSeparator <K extends Comparable<K> & Serializable, EV extends Serializable>
+			implements FlatMapFunction<Edge<K, EV>, Vertex<K, Long>> {
+
+		private final boolean collectIn;
+		private final boolean collectOut;
+
+		public DegreeTypeSeparator(boolean collectIn, boolean collectOut) {
+			this.collectIn = collectIn;
+			this.collectOut = collectOut;
+		}
+
+		@Override
+		public void flatMap(Edge<K, EV> edge, Collector<Vertex<K, Long>> out) throws Exception {
+			if (collectOut) {
+				out.collect(new Vertex<>(edge.getSource(), 1L));
+			}
+			if (collectIn) {
+				out.collect(new Vertex<>(edge.getTarget(), 1L));
+			}
+		}
+	}
+
+	private static final class DegreeMapFunction <K extends Comparable<K> & Serializable>
+			implements MapFunction<Vertex<K, Long>, Vertex<K, Long>> {
+		private final Map<K, Long> localDegrees;
+
+		public DegreeMapFunction() {
+			localDegrees = new HashMap<>();
+		}
+
+		@Override
+		public Vertex<K, Long> map(Vertex<K, Long> degree) throws Exception {
+			K key = degree.getId();
+			if (!localDegrees.containsKey(key)) {
+				localDegrees.put(key, 0L);
+			}
+			localDegrees.put(key, localDegrees.get(key) + degree.getValue());
+			return new Vertex<>(key, localDegrees.get(key));
+		}
 	}
 
 	/**
@@ -78,7 +172,6 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 				.filter(new FilterDistinctVertices<K>());
 	}
 
-	@SuppressWarnings("serial")
 	private static final class EmitSrcAndTarget<K extends Comparable<K> & Serializable, EV extends Serializable>
 			implements FlatMapFunction<Edge<K, EV>, Vertex<K, NullValue>> {
 
@@ -90,7 +183,6 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		}
 	}
 
-	@SuppressWarnings("serial")
 	private static final class FilterDistinctVertices<K extends Comparable<K> & Serializable>
 			implements FilterFunction<Vertex<K, NullValue>> {
 
@@ -126,7 +218,6 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		return new EdgeOnlyStream<>(mappedEdges, this.context);
 	}
 
-	@SuppressWarnings("serial")
 	private static final class ApplyMapperToEdgeWithType<K extends Comparable<K> & Serializable,
 			EV extends Serializable, NV extends Serializable> implements MapFunction
 			<Edge<K, EV>, Edge<K, NV>>, ResultTypeQueryable<Edge<K, NV>> {
@@ -190,7 +281,6 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		}
 	}
 
-
 	/**
 	 * Apply a filter to each edge in the graph stream
 	 *
@@ -203,6 +293,45 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 				.filter(filter);
 
 		return new EdgeOnlyStream<>(remainingEdges, this.context);
+	}
+
+	/**
+	 * Get the degree stream
+	 *
+	 * @return a stream of vertices, with the degree as the vertex value
+	 * @throws Exception
+	 */
+	public DataStream<Vertex<K, Long>> getDegrees() throws Exception {
+		if (!configuration.getCollectDegrees()) {
+			throw new Exception("Degrees are not collected in this graph stream");
+		}
+		return this.degrees;
+	}
+
+	/**
+	 * Get the in-degree stream
+	 *
+	 * @return a stream of vertices, with the in-degree as the vertex value
+	 * @throws Exception
+	 */
+	public DataStream<Vertex<K, Long>> getInDegrees() throws Exception {
+		if (!configuration.getCollectInDegrees()) {
+			throw new Exception("In-degrees are not collected in this graph stream");
+		}
+		return this.inDegrees;
+	}
+
+	/**
+	 * Get the out-degree stream
+	 *
+	 * @return a stream of vertices, with the out-degree as the vertex value
+	 * @throws Exception
+	 */
+	public DataStream<Vertex<K, Long>> getOutDegrees() throws Exception {
+		if (!configuration.getCollectOutDegrees()) {
+			throw new Exception("Oout-degrees are not collected in this graph stream");
+		}
+		return this.outDegrees;
 	}
 
 }

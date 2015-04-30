@@ -329,9 +329,10 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 	 */
 	public DataStream<Vertex<K, Long>> getOutDegrees() throws Exception {
 		if (!configuration.getCollectOutDegrees()) {
-			throw new Exception("Oout-degrees are not collected in this graph stream");
+			throw new Exception("Out-degrees are not collected in this graph stream");
 		}
 		return this.outDegrees;
 	}
+
 
 }

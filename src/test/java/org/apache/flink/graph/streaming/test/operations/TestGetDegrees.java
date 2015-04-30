@@ -58,7 +58,7 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 	@Test
 	public void testGetDegrees() throws Exception {
 		/*
-		 * Test mapEdges() keeping the same edge types
+		 * Test getDegrees() with the sample graph
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
@@ -86,5 +86,51 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 				"5,3\n";
 	}
 
-	// TODO: More tests
+	@Test
+	public void testGetInDegrees() throws Exception {
+		/*
+		 * Test getInDegrees() with the sample graph
+	     */
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		GraphConfiguration config = new GraphConfiguration();
+		config.setCollectDegrees(true);
+
+		EdgeOnlyStream<Long, Long> graph =
+				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env, config);
+
+		graph.getInDegrees().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,1\n" +
+				"2,1\n" +
+				"3,1\n" +
+				"3,2\n" +
+				"4,1\n" +
+				"5,1\n" +
+				"5,2\n";
+	}
+
+	@Test
+	public void testGetOutDegrees() throws Exception {
+		/*
+		 * Test getOutDegrees() with the sample graph
+	     */
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		GraphConfiguration config = new GraphConfiguration();
+		config.setCollectDegrees(true);
+
+		EdgeOnlyStream<Long, Long> graph =
+				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env, config);
+
+		graph.getOutDegrees().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,1\n" +
+				"1,2\n" +
+				"2,1\n" +
+				"3,1\n" +
+				"3,2\n" +
+				"4,1\n" +
+				"5,1\n";
+	}
 }

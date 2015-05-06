@@ -46,11 +46,11 @@ public class WindowedBipartiteMergeTreeExample {
 
 		// Source: http://grouplens.org/datasets/movielens/
 		DataStream<Edge<Long, NullValue>> edges = env
-				.readTextFile("movielens_10m_sorted.txt")
+				.readTextFile("movielens_100k_sorted.txt")
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
-						String[] args = s.split(",");
+						String[] args = s.split("\t");
 						long src = Long.parseLong(args[0]);
 						long trg = Long.parseLong(args[1]) + 1000000;
 						return new Edge<>(src, trg, NullValue.getInstance());
@@ -58,18 +58,18 @@ public class WindowedBipartiteMergeTreeExample {
 				});
 
 		edges.map(new InitCandidateMapper())
-				.window(Count.of(100000))
+				.window(Count.of(1000))
 					.mapWindow(new WindowedBipartitenessMapper())
 				.flatten()
 
 				.groupBy(new MergeTreeKeySelector(0))
 
-				.window(Count.of(10000))
+				.window(Count.of(100))
 					.mapWindow(new WindowedBipartitenessMapper())
 				.flatten()
 				.groupBy(new MergeTreeKeySelector(1))
 
-				.window(Count.of(1000))
+				.window(Count.of(10))
 					.mapWindow(new WindowedBipartitenessMapper())
 				.flatten();
 
@@ -144,6 +144,8 @@ public class WindowedBipartiteMergeTreeExample {
 					if (!success) {
 						return fail();
 					}
+
+					firstKey = Math.min(inEntry.getKey(), firstKey);
 
 					// Merge other components of candidate into the lowest id component
 					for (int i = 1; i < mergeWith.size(); ++i) {
@@ -310,11 +312,6 @@ public class WindowedBipartiteMergeTreeExample {
 				if (selfComponent.containsKey(inputVertex)) {
 					mergeBy.add(inputVertex);
 				}
-			}
-
-			if (mergeBy.isEmpty()) {
-				System.out.println(selfComponent);
-				System.out.println(inputComponent);
 			}
 
 			// Determine if the merge should be with reversed signs or not

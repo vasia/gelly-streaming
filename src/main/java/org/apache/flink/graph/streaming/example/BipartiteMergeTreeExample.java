@@ -126,6 +126,8 @@ public class BipartiteMergeTreeExample {
 						return fail();
 					}
 
+					firstKey = Math.min(inEntry.getKey(), firstKey);
+
 					// Merge other components of candidate into the lowest id component
 					for (int i = 1; i < mergeWith.size(); ++i) {
 						success = merge(candidate, mergeWith.get(i), firstKey);

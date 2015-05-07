@@ -20,18 +20,13 @@ package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.RichMapFunction;
-import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.example.utils.Candidate;
+import org.apache.flink.graph.streaming.EdgeOnlyStream;
+import org.apache.flink.graph.streaming.example.utils.RawCandidate;
 import org.apache.flink.graph.streaming.example.utils.SignedVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.RichWindowMapFunction;
-import org.apache.flink.streaming.api.functions.WindowMapFunction;
-import org.apache.flink.streaming.api.windowing.helper.Count;
 import org.apache.flink.types.NullValue;
-import org.apache.flink.util.Collector;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -46,53 +41,30 @@ public class WindowedBipartiteMergeTreeExample {
 
 		// Source: http://grouplens.org/datasets/movielens/
 		DataStream<Edge<Long, NullValue>> edges = env
-				.readTextFile("movielens_1m_sorted.txt")
+				.readTextFile("movielens_10k_sorted.txt")
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
-						String[] args = s.split(",");
+						String[] args = s.split("\t");
 						long src = Long.parseLong(args[0]);
 						long trg = Long.parseLong(args[1]) + 1000000;
 						return new Edge<>(src, trg, NullValue.getInstance());
 					}
 				});
 
-		edges.map(new InitCandidateMapper())
-				.window(Count.of(1000))
-					.mapWindow(new WindowedBipartitenessMapper())
-				.flatten()
-
-				.groupBy(new MergeTreeKeySelector(0))
-
-				.window(Count.of(100))
-					.mapWindow(new WindowedBipartitenessMapper())
-				.flatten()
-				.groupBy(new MergeTreeKeySelector(1))
-
-				.window(Count.of(10))
-					.mapWindow(new WindowedBipartitenessMapper())
-				.flatten();
+		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edges, env);
+		graph.mergeTree(new InitCandidateMapper(), new BipartitenessMapper(), 10000)
+				.print();
 
 		JobExecutionResult res = env.execute("Distributed Merge Tree Sandbox");
-		long runtime = res.getNetRuntime();
-		System.out.println("Runtime: " + runtime);
+		System.out.println("Runtime: " + res.getNetRuntime());
 	}
 
-	private static final class WindowedBipartitenessMapper extends RichWindowMapFunction<Candidate, Candidate> {
-		private Candidate candidate = null;
+	private static final class BipartitenessMapper implements MapFunction<RawCandidate, RawCandidate> {
+		private RawCandidate candidate = null;
 		private boolean failed = false;
-		private int self;
 
-		@Override
-		public void mapWindow(Iterable<Candidate> iterator, Collector<Candidate> out) throws Exception {
-			for (Candidate input : iterator) {
-				candidate = map(input);
-			}
-			out.collect(candidate);
-		}
-
-		public Candidate map(Candidate input) throws Exception {
-			self = getRuntimeContext().getIndexOfThisSubtask();
+		public RawCandidate map(RawCandidate input) throws Exception {
 
 			// Propagate failure
 			if (!input.getSuccess() || failed) {
@@ -101,147 +73,7 @@ public class WindowedBipartiteMergeTreeExample {
 
 			// Store and forward the first candidate
 			if (candidate == null) {
-				candidate = new Candidate(self, true, input);
-				return candidate;
-			}
-
-			// Compare each input component with each candidate component and merge accordingly
-			for (Map.Entry<Long, Map<Long, SignedVertex>> inEntry : input.getMap().entrySet()) {
-
-				List<Long> mergeWith = new ArrayList<>();
-
-				for (Map.Entry<Long, Map<Long, SignedVertex>> selfEntry : candidate.getMap().entrySet()) {
-					long selfKey = selfEntry.getKey();
-
-					// If the two components are exactly the same, skip them
-					if (inEntry.getValue().keySet().containsAll(selfEntry.getValue().keySet())
-							&& selfEntry.getValue().keySet().containsAll(inEntry.getValue().keySet())) {
-						continue;
-					}
-
-					// Find vertices of input component in the candidate component
-					for (long inVertex : inEntry.getValue().keySet()) {
-						if (selfEntry.getValue().containsKey(inVertex)) {
-							if (!mergeWith.contains(selfKey)) {
-								mergeWith.add(selfKey);
-								break;
-							}
-						}
-					}
-				}
-
-				if (mergeWith.isEmpty()) {
-					// If the input component is disjoint from all components of the candidate,
-					// simply add that component
-					candidate.add(inEntry.getKey(), inEntry.getValue());
-				} else {
-					// Merge the input with the lowest id component in candidate
-					Collections.sort(mergeWith);
-					long firstKey = mergeWith.get(0);
-					boolean success;
-
-					success = merge(input, inEntry.getKey(), firstKey);
-					if (!success) {
-						return fail();
-					}
-
-					firstKey = Math.min(inEntry.getKey(), firstKey);
-
-					// Merge other components of candidate into the lowest id component
-					for (int i = 1; i < mergeWith.size(); ++i) {
-
-						success = merge(candidate, mergeWith.get(i), firstKey);
-						if (!success) {
-							fail();
-						}
-
-						candidate.getMap().remove(mergeWith.get(i));
-					}
-				}
-			}
-
-			return candidate;
-		}
-
-		private boolean merge(Candidate input, long inputKey, long selfKey) throws Exception {
-			Map<Long, SignedVertex> inputComponent = input.getMap().get(inputKey);
-			Map<Long, SignedVertex> selfComponent = candidate.getMap().get(selfKey);
-
-			// Find the vertices to merge along
-			List<Long> mergeBy = new ArrayList<>();
-
-			for (long inputVertex : inputComponent.keySet()) {
-				if (selfComponent.containsKey(inputVertex)) {
-					mergeBy.add(inputVertex);
-				}
-			}
-
-			if (mergeBy.isEmpty()) {
-				System.out.println(selfComponent);
-				System.out.println(inputComponent);
-			}
-
-			// Determine if the merge should be with reversed signs or not
-			boolean inputSign = inputComponent.get(mergeBy.get(0)).getSign();
-			boolean selfSign = selfComponent.get(mergeBy.get(0)).getSign();
-			boolean reversed = inputSign != selfSign;
-
-			// Evaluate the merge
-			boolean success = true;
-			for (long mergeVertex : mergeBy) {
-				inputSign = inputComponent.get(mergeVertex).getSign();
-				selfSign = selfComponent.get(mergeVertex).getSign();
-				if (reversed) {
-					success = inputSign != selfSign;
-				} else {
-					success = inputSign == selfSign;
-				}
-				if (!success) {
-					return false;
-				}
-			}
-
-			// Execute the merge
-			long commonKey = Math.min(inputKey, selfKey);
-
-			// Merge input vertices
-			for (SignedVertex inputVertex : inputComponent.values()) {
-
-				if (reversed) {
-					success = candidate.add(commonKey, inputVertex.reverse());
-				} else {
-					success = candidate.add(commonKey, inputVertex);
-				}
-				if (!success) {
-					return false;
-				}
-			}
-
-			return true;
-		}
-
-		private Candidate fail() {
-			failed = true;
-			return new Candidate(self, false);
-		}
-	}
-
-	private static final class BipartitenessMapper extends RichMapFunction<Candidate, Candidate> {
-		private Candidate candidate = null;
-		private boolean failed = false;
-		private int self;
-
-		public Candidate map(Candidate input) throws Exception {
-			self = getRuntimeContext().getIndexOfThisSubtask();
-
-			// Propagate failure
-			if (!input.getSuccess() || failed) {
-				return fail();
-			}
-
-			// Store and forward the first candidate
-			if (candidate == null) {
-				candidate = new Candidate(self, true, input);
+				candidate = new RawCandidate(true, input);
 				return candidate;
 			}
 
@@ -301,7 +133,7 @@ public class WindowedBipartiteMergeTreeExample {
 			return candidate;
 		}
 
-		private boolean merge(Candidate input, long inputKey, long selfKey) throws Exception {
+		private boolean merge(RawCandidate input, long inputKey, long selfKey) throws Exception {
 			Map<Long, SignedVertex> inputComponent = input.getMap().get(inputKey);
 			Map<Long, SignedVertex> selfComponent = candidate.getMap().get(selfKey);
 
@@ -353,34 +185,21 @@ public class WindowedBipartiteMergeTreeExample {
 			return true;
 		}
 
-		private Candidate fail() {
+		private RawCandidate fail() {
 			failed = true;
-			return new Candidate(self, false);
-		}
-	}
-
-	private static final class MergeTreeKeySelector implements KeySelector<Candidate, Integer> {
-		private int level;
-
-		public MergeTreeKeySelector(int level) {
-			this.level = level;
-		}
-
-		@Override
-		public Integer getKey(Candidate input) throws Exception {
-			return input.getSource() >> (level + 1);
+			return new RawCandidate(false);
 		}
 	}
 
 	private static final class InitCandidateMapper implements
-			MapFunction<Edge<Long,NullValue>, Candidate> {
+			MapFunction<Edge<Long,NullValue>, RawCandidate> {
 
 		@Override
-		public Candidate map(Edge<Long, NullValue> edge) throws Exception {
+		public RawCandidate map(Edge<Long, NullValue> edge) throws Exception {
 			long src = Math.min(edge.getSource(), edge.getTarget());
 			long trg = Math.max(edge.getSource(), edge.getTarget());
 
-			Candidate candidate = new Candidate(0, true);
+			RawCandidate candidate = new RawCandidate(true);
 			candidate.add(src, new SignedVertex(src, true));
 			candidate.add(src, new SignedVertex(trg, false));
 

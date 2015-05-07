@@ -21,7 +21,10 @@ package org.apache.flink.graph.streaming;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
@@ -29,6 +32,8 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.RichWindowMapFunction;
+import org.apache.flink.streaming.api.windowing.helper.Count;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
@@ -334,5 +339,103 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		return this.outDegrees;
 	}
 
+	/**
+	 * Aggregates the results of a distributed mapper in a merge-tree structure
+	 *
+	 * @param initMapper the map function that transforms edges into the intermediate data type
+	 * @param treeMapper the map function that performs the aggregation between the data elements
+	 * @param windowSize the size of the window to use before the first level
+	 * @param <T> the inner data type
+	 * @return an aggregated stream of the given data type
+	 */
+	public <T extends Serializable> DataStream<T> mergeTree(MapFunction<Edge<K, EV>, T> initMapper,
+			MapFunction<T, T> treeMapper, int windowSize) {
+		int dop = this.context.getParallelism();
+		int levels = (int) (Math.log(dop) / Math.log(2));
 
+		DataStream<Tuple2<Integer, T>> chainedStream = this.edges
+				.map(new MergeTreeWrapperMapper<>(initMapper));
+
+
+		for (int i = 0; i < levels; ++i) {
+			chainedStream = chainedStream
+					.window(Count.of(windowSize / (int) Math.pow(10, i)))
+					.mapWindow(new MergeTreeWindowMapper<T>(treeMapper))
+					.flatten();
+
+			if (i < levels - 1) {
+				chainedStream = chainedStream.groupBy(new MergeTreeKeySelector<T>(i));
+			}
+		}
+
+		return chainedStream.map(new MergeTreeProjectionMapper<T>());
+	}
+
+	private static final class MergeTreeWrapperMapper<K extends Comparable<K> & Serializable,
+			EV extends Serializable, T extends Serializable> extends RichMapFunction<Edge<K, EV>, Tuple2<Integer, T>>
+			implements ResultTypeQueryable<Tuple2<Integer, T>> {
+		private final MapFunction<Edge<K, EV>, T> initMapper;
+
+		public MergeTreeWrapperMapper(MapFunction<Edge<K, EV>, T> initMapper) {
+			this.initMapper = initMapper;
+		}
+
+		@Override
+		public Tuple2<Integer, T> map(Edge<K, EV> edge) throws Exception {
+			return new Tuple2<>(getRuntimeContext().getIndexOfThisSubtask(), initMapper.map(edge));
+		}
+
+		@Override
+		public TypeInformation<Tuple2<Integer, T>> getProducedType() {
+			TypeInformation<Integer> keyType = TypeExtractor.getForClass(Integer.class);
+			TypeInformation<T> innerType = TypeExtractor.createTypeInfo(MapFunction.class,
+					initMapper.getClass(), 1, null, null);
+
+			return new TupleTypeInfo<Tuple2<Integer, T>>(keyType, innerType);
+		}
+	}
+
+	private static final class MergeTreeWindowMapper<T extends Serializable>
+			extends RichWindowMapFunction<Tuple2<Integer, T>, Tuple2<Integer, T>> {
+		private final MapFunction<T, T> treeMapper;
+
+		public MergeTreeWindowMapper(MapFunction<T, T> treeMapper) {
+			this.treeMapper = treeMapper;
+		}
+
+		@Override
+		public void mapWindow(Iterable<Tuple2<Integer, T>> iterable,
+				Collector<Tuple2<Integer, T>> out) throws Exception {
+			T t = null;
+			for (Tuple2<Integer, T> entry : iterable) {
+				t = treeMapper.map(entry.f1);
+			}
+			out.collect(new Tuple2<>(getRuntimeContext().getIndexOfThisSubtask(), t));
+		}
+	}
+
+	private static final class MergeTreeKeySelector<T extends Serializable>
+			implements KeySelector<Tuple2<Integer, T>, Integer> {
+		private int level;
+
+		public MergeTreeKeySelector(int level) {
+			this.level = level;
+		}
+
+		@Override
+		public Integer getKey(Tuple2<Integer, T> input) throws Exception {
+			return input.f0 >> (level + 1);
+		}
+	}
+
+	private static final class MergeTreeProjectionMapper<T extends Serializable>
+			implements MapFunction<Tuple2<Integer, T>, T> {
+		public MergeTreeProjectionMapper() {
+		}
+
+		@Override
+		public T map(Tuple2<Integer, T> input) throws Exception {
+			return input.f1;
+		}
+	}
 }

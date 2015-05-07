@@ -41,11 +41,11 @@ public class WindowedBipartiteMergeTreeExample {
 
 		// Source: http://grouplens.org/datasets/movielens/
 		DataStream<Edge<Long, NullValue>> edges = env
-				.readTextFile("movielens_10k_sorted.txt")
+				.readTextFile("movielens_1m_sorted.txt")
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
-						String[] args = s.split("\t");
+						String[] args = s.split(",");
 						long src = Long.parseLong(args[0]);
 						long trg = Long.parseLong(args[1]) + 1000000;
 						return new Edge<>(src, trg, NullValue.getInstance());
@@ -116,6 +116,8 @@ public class WindowedBipartiteMergeTreeExample {
 					if (!success) {
 						return fail();
 					}
+
+					firstKey = Math.min(inEntry.getKey(), firstKey);
 
 					// Merge other components of candidate into the lowest id component
 					for (int i = 1; i < mergeWith.size(); ++i) {

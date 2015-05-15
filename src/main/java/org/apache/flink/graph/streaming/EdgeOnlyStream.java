@@ -37,7 +37,6 @@ import org.apache.flink.streaming.api.windowing.helper.Count;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -52,7 +51,7 @@ import java.util.Set;
  * @param <K> the key type for edge and vertex identifiers.
  * @param <EV> the value type for edges.
  */
-public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends Serializable> {
+public class EdgeOnlyStream<K, EV> {
 
 	private final StreamExecutionEnvironment context;
 	private final DataStream<Edge<K, EV>> edges;
@@ -119,7 +118,7 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		}
 	}
 
-	private static final class DegreeTypeSeparator <K extends Comparable<K> & Serializable, EV extends Serializable>
+	private static final class DegreeTypeSeparator <K, EV>
 			implements FlatMapFunction<Edge<K, EV>, Vertex<K, Long>> {
 
 		private final boolean collectIn;
@@ -141,7 +140,7 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		}
 	}
 
-	private static final class DegreeMapFunction <K extends Comparable<K> & Serializable>
+	private static final class DegreeMapFunction <K>
 			implements MapFunction<Vertex<K, Long>, Vertex<K, Long>> {
 		private final Map<K, Long> localDegrees;
 
@@ -177,7 +176,7 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 				.filter(new FilterDistinctVertices<K>());
 	}
 
-	private static final class EmitSrcAndTarget<K extends Comparable<K> & Serializable, EV extends Serializable>
+	private static final class EmitSrcAndTarget<K, EV>
 			implements FlatMapFunction<Edge<K, EV>, Vertex<K, NullValue>> {
 
 		@Override
@@ -188,7 +187,7 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		}
 	}
 
-	private static final class FilterDistinctVertices<K extends Comparable<K> & Serializable>
+	private static final class FilterDistinctVertices<K>
 			implements FilterFunction<Vertex<K, NullValue>> {
 
 		Set<K> keys = new HashSet<>();
@@ -216,16 +215,15 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 	 * @param mapper the map function to apply.
 	 * @return a new graph stream.
 	 */
-	public <NV extends Serializable> EdgeOnlyStream<K, NV> mapEdges(final MapFunction<Edge<K, EV>, NV> mapper) {
+	public <NV> EdgeOnlyStream<K, NV> mapEdges(final MapFunction<Edge<K, EV>, NV> mapper) {
 		TypeInformation<K> keyType = ((TupleTypeInfo<?>) edges.getType()).getTypeAt(0);
 		DataStream<Edge<K, NV>> mappedEdges = edges.map(new ApplyMapperToEdgeWithType<>(mapper,
 				keyType));
 		return new EdgeOnlyStream<>(mappedEdges, this.context);
 	}
 
-	private static final class ApplyMapperToEdgeWithType<K extends Comparable<K> & Serializable,
-			EV extends Serializable, NV extends Serializable> implements MapFunction
-			<Edge<K, EV>, Edge<K, NV>>, ResultTypeQueryable<Edge<K, NV>> {
+	private static final class ApplyMapperToEdgeWithType<K, EV, NV>
+			implements MapFunction<Edge<K, EV>, Edge<K, NV>>, ResultTypeQueryable<Edge<K, NV>> {
 
 		private MapFunction<Edge<K, EV>, NV> innerMapper;
 		private transient TypeInformation<K> keyType;
@@ -265,8 +263,8 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		return new EdgeOnlyStream<>(remainingEdges, this.context);
 	}
 
-	private static final class ApplyVertexFilterToEdges<K extends Comparable<K> & Serializable,
-			EV extends Serializable> implements FilterFunction<Edge<K, EV>> {
+	private static final class ApplyVertexFilterToEdges<K, EV>
+			implements FilterFunction<Edge<K, EV>> {
 
 		private FilterFunction<Vertex<K, NullValue>> vertexFilter;
 
@@ -348,7 +346,7 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 	 * @param <T> the inner data type
 	 * @return an aggregated stream of the given data type
 	 */
-	public <T extends Serializable> DataStream<T> mergeTree(MapFunction<Edge<K, EV>, T> initMapper,
+	public <T> DataStream<T> mergeTree(MapFunction<Edge<K, EV>, T> initMapper,
 			MapFunction<T, T> treeMapper, int windowSize) {
 		int dop = this.context.getParallelism();
 		int levels = (int) (Math.log(dop) / Math.log(2));
@@ -371,8 +369,8 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		return chainedStream.map(new MergeTreeProjectionMapper<T>());
 	}
 
-	private static final class MergeTreeWrapperMapper<K extends Comparable<K> & Serializable,
-			EV extends Serializable, T extends Serializable> extends RichMapFunction<Edge<K, EV>, Tuple2<Integer, T>>
+	private static final class MergeTreeWrapperMapper<K, EV, T>
+			extends RichMapFunction<Edge<K, EV>, Tuple2<Integer, T>>
 			implements ResultTypeQueryable<Tuple2<Integer, T>> {
 		private final MapFunction<Edge<K, EV>, T> initMapper;
 
@@ -395,7 +393,7 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		}
 	}
 
-	private static final class MergeTreeWindowMapper<T extends Serializable>
+	private static final class MergeTreeWindowMapper<T>
 			extends RichWindowMapFunction<Tuple2<Integer, T>, Tuple2<Integer, T>> {
 		private final MapFunction<T, T> treeMapper;
 
@@ -414,7 +412,7 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		}
 	}
 
-	private static final class MergeTreeKeySelector<T extends Serializable>
+	private static final class MergeTreeKeySelector<T>
 			implements KeySelector<Tuple2<Integer, T>, Integer> {
 		private int level;
 
@@ -428,7 +426,7 @@ public class EdgeOnlyStream<K extends Comparable<K> & Serializable, EV extends S
 		}
 	}
 
-	private static final class MergeTreeProjectionMapper<T extends Serializable>
+	private static final class MergeTreeProjectionMapper<T>
 			implements MapFunction<Tuple2<Integer, T>, T> {
 		public MergeTreeProjectionMapper() {
 		}

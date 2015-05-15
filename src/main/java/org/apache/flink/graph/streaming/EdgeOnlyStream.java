@@ -57,9 +57,9 @@ public class EdgeOnlyStream<K, EV> {
 	private final DataStream<Edge<K, EV>> edges;
 	private final GraphConfiguration configuration;
 
-	private final DataStream<Vertex<K, Long>> degrees;
-	private final DataStream<Vertex<K, Long>> inDegrees;
-	private final DataStream<Vertex<K, Long>> outDegrees;
+	private DataStream<Vertex<K, Long>> degrees;
+	private DataStream<Vertex<K, Long>> inDegrees;
+	private DataStream<Vertex<K, Long>> outDegrees;
 
 	/**
 	 * Creates a graph from an edge stream
@@ -91,30 +91,18 @@ public class EdgeOnlyStream<K, EV> {
 		this.configuration = configuration;
 
 		if (this.configuration.getCollectDegrees()) {
-			this.degrees = this.edges
-					.flatMap(new DegreeTypeSeparator<K, EV>(true, true))
-					.groupBy(0)
-					.map(new DegreeMapFunction<K>());
-		} else {
-			this.degrees = null;
+			this.degrees = this.aggregate(new DegreeTypeSeparator<K, EV>(true, true),
+					new DegreeMapFunction<K>());
 		}
 
 		if (this.configuration.getCollectInDegrees()) {
-			this.inDegrees = this.edges
-					.flatMap(new DegreeTypeSeparator<K, EV>(true, false))
-					.groupBy(0)
-					.map(new DegreeMapFunction<K>());
-		} else {
-			this.inDegrees = null;
+			this.inDegrees = this.aggregate(new DegreeTypeSeparator<K, EV>(true, false),
+					new DegreeMapFunction<K>());
 		}
 
 		if (this.configuration.getCollectOutDegrees()) {
-			this.outDegrees = this.edges
-					.flatMap(new DegreeTypeSeparator<K, EV>(false, true))
-					.groupBy(0)
-					.map(new DegreeMapFunction<K>());
-		} else {
-			this.outDegrees = null;
+			this.outDegrees = this.aggregate(new DegreeTypeSeparator<K, EV>(false, true),
+					new DegreeMapFunction<K>());
 		}
 	}
 
@@ -358,7 +346,7 @@ public class EdgeOnlyStream<K, EV> {
 		for (int i = 0; i < levels; ++i) {
 			chainedStream = chainedStream
 					.window(Count.of(windowSize / (int) Math.pow(10, i)))
-					.mapWindow(new MergeTreeWindowMapper<T>(treeMapper))
+					.mapWindow(new MergeTreeWindowMapper<>(treeMapper))
 					.flatten();
 
 			if (i < levels - 1) {
@@ -389,7 +377,7 @@ public class EdgeOnlyStream<K, EV> {
 			TypeInformation<T> innerType = TypeExtractor.createTypeInfo(MapFunction.class,
 					initMapper.getClass(), 1, null, null);
 
-			return new TupleTypeInfo<Tuple2<Integer, T>>(keyType, innerType);
+			return new TupleTypeInfo<>(keyType, innerType);
 		}
 	}
 
@@ -435,5 +423,21 @@ public class EdgeOnlyStream<K, EV> {
 		public T map(Tuple2<Integer, T> input) throws Exception {
 			return input.f1;
 		}
+	}
+
+	/**
+	 * The aggregate function splits the edge stream up into a vertex stream and applies
+	 * a mapper on the resulting vertices
+	 *
+	 * @param edgeMapper the mapper that converts the edge stream to a vertex stream
+	 * @param vertexMapper the mapper that aggregates vertex values
+	 * @param <VV> the vertex value used
+	 * @return a stream of vertices with the aggregated vertex value
+	 */
+	public <VV> DataStream<Vertex<K, VV>> aggregate(FlatMapFunction<Edge<K, EV>, Vertex<K, VV>> edgeMapper,
+			MapFunction<Vertex<K, VV>, Vertex<K, VV>> vertexMapper) {
+		return this.edges.flatMap(edgeMapper)
+				.groupBy(0)
+				.map(vertexMapper);
 	}
 }

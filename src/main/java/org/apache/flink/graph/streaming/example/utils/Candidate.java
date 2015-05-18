@@ -18,45 +18,34 @@
 
 package org.apache.flink.graph.streaming.example.utils;
 
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple2;
 
 import java.util.Map;
 import java.util.TreeMap;
 
-public class Candidate extends Tuple3<Integer, Boolean, TreeMap<Long, Map<Long, SignedVertex>>> {
+public class Candidate extends Tuple2<Boolean, TreeMap<Long, Map<Long, SignedVertex>>> {
 
 	public Candidate() {}
 
-	public Candidate(int source, boolean success) {
-		this.f0 = source;
-		this.f1 = success;
-		this.f2 = new TreeMap<>();
+	public Candidate(boolean success) {
+		this.f0 = success;
+		this.f1 = new TreeMap<>();
 	}
 
-	public Candidate(int source, boolean success, TreeMap<Long, Map<Long, SignedVertex>> map) {
-		this.f0 = source;
-		this.f1 = success;
-		this.f2 = map;
-	}
-
-	public Candidate(int source, boolean success, Candidate input) throws Exception {
-		this(source, success);
+	public Candidate(boolean success, Candidate input) throws Exception {
+		this(success);
 
 		for (Map.Entry<Long, Map<Long, SignedVertex>> entry : input.getMap().entrySet()) {
 			this.add(entry.getKey(), entry.getValue());
 		}
 	}
 
-	public int getSource() {
+	public boolean getSuccess() {
 		return this.f0;
 	}
 
-	public boolean getSuccess() {
-		return this.f1;
-	}
-
 	public TreeMap<Long, Map<Long, SignedVertex>> getMap() {
-		return this.f2;
+		return this.f1;
 	}
 
 	public boolean add(long component, Map<Long, SignedVertex> vertices) throws Exception {

@@ -23,7 +23,7 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
-import org.apache.flink.graph.streaming.example.utils.RawCandidate;
+import org.apache.flink.graph.streaming.example.utils.Candidate;
 import org.apache.flink.graph.streaming.example.utils.SignedVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -62,11 +62,11 @@ public class WindowedBipartiteMergeTreeExample {
 		System.out.println("Runtime: " + res.getNetRuntime());
 	}
 
-	private static final class BipartitenessMapper implements MapFunction<RawCandidate, RawCandidate> {
-		private RawCandidate candidate = null;
+	private static final class BipartitenessMapper implements MapFunction<Candidate, Candidate> {
+		private Candidate candidate = null;
 		private boolean failed = false;
 
-		public RawCandidate map(RawCandidate input) throws Exception {
+		public Candidate map(Candidate input) throws Exception {
 
 			// Propagate failure
 			if (!input.getSuccess() || failed) {
@@ -75,7 +75,7 @@ public class WindowedBipartiteMergeTreeExample {
 
 			// Store and forward the first candidate
 			if (candidate == null) {
-				candidate = new RawCandidate(true, input);
+				candidate = new Candidate(true, input);
 				return candidate;
 			}
 
@@ -137,7 +137,7 @@ public class WindowedBipartiteMergeTreeExample {
 			return candidate;
 		}
 
-		private boolean merge(RawCandidate input, long inputKey, long selfKey) throws Exception {
+		private boolean merge(Candidate input, long inputKey, long selfKey) throws Exception {
 			Map<Long, SignedVertex> inputComponent = input.getMap().get(inputKey);
 			Map<Long, SignedVertex> selfComponent = candidate.getMap().get(selfKey);
 
@@ -189,21 +189,21 @@ public class WindowedBipartiteMergeTreeExample {
 			return true;
 		}
 
-		private RawCandidate fail() {
+		private Candidate fail() {
 			failed = true;
-			return new RawCandidate(false);
+			return new Candidate(false);
 		}
 	}
 
 	private static final class InitCandidateMapper implements
-			FlatMapFunction<Edge<Long,NullValue>, RawCandidate> {
+			FlatMapFunction<Edge<Long,NullValue>, Candidate> {
 
 		@Override
-		public void flatMap(Edge<Long, NullValue> edge, Collector<RawCandidate> out) throws Exception {
+		public void flatMap(Edge<Long, NullValue> edge, Collector<Candidate> out) throws Exception {
 			long src = Math.min(edge.getSource(), edge.getTarget());
 			long trg = Math.max(edge.getSource(), edge.getTarget());
 
-			RawCandidate candidate = new RawCandidate(true);
+			Candidate candidate = new Candidate(true);
 			candidate.add(src, new SignedVertex(src, true));
 			candidate.add(src, new SignedVertex(trg, false));
 

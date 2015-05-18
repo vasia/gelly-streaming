@@ -32,11 +32,6 @@ public class Degrees extends Tuple2<Map<Long, Long>, Boolean> {
 		this.f1 = merge;
 	}
 
-	public Degrees(Map<Long, Long> map, boolean merge) {
-		this.f0 = map;
-		this.f1 = merge;
-	}
-
 	public Degrees(Degrees input, boolean merge) throws Exception {
 		this(merge);
 		this.set(input.getMap());

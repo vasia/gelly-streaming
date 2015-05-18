@@ -19,6 +19,7 @@
 package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.JobExecutionResult;
+import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
@@ -27,6 +28,7 @@ import org.apache.flink.graph.streaming.example.utils.SignedVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
+import org.apache.flink.util.Collector;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -194,10 +196,10 @@ public class WindowedBipartiteMergeTreeExample {
 	}
 
 	private static final class InitCandidateMapper implements
-			MapFunction<Edge<Long,NullValue>, RawCandidate> {
+			FlatMapFunction<Edge<Long,NullValue>, RawCandidate> {
 
 		@Override
-		public RawCandidate map(Edge<Long, NullValue> edge) throws Exception {
+		public void flatMap(Edge<Long, NullValue> edge, Collector<RawCandidate> out) throws Exception {
 			long src = Math.min(edge.getSource(), edge.getTarget());
 			long trg = Math.max(edge.getSource(), edge.getTarget());
 
@@ -205,7 +207,7 @@ public class WindowedBipartiteMergeTreeExample {
 			candidate.add(src, new SignedVertex(src, true));
 			candidate.add(src, new SignedVertex(trg, false));
 
-			return candidate;
+			out.collect(candidate);
 		}
 	}
 

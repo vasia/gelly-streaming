@@ -21,9 +21,8 @@ package org.apache.flink.graph.streaming.example;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.RichMapFunction;
-import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.streaming.EdgeOnlyStream;
 import org.apache.flink.graph.streaming.example.utils.Degrees;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -54,15 +53,9 @@ public class DegreeCountMergeTreeExample {
 					}
 				});
 
-		edges
-				.flatMap(new InitDegreeMapper())
-				.groupBy(0)
-				.map(new DegreeCountMapper())
-				.groupBy(new MergeTreeKeySelector(0))
-				.map(new DegreeCountMapper())
-				.groupBy(new MergeTreeKeySelector(1))
-				.map(new DegreeCountMapper())
-				.map(new TopDegreeMapper())
+
+		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edges, env);
+		graph.mergeTree(new InitDegreeMapper(), new DegreeCountMapper(), 10000)
 				.print();
 
 		JobExecutionResult res = env.execute("Distributed Merge Tree Sandbox");
@@ -74,12 +67,12 @@ public class DegreeCountMergeTreeExample {
 		@Override
 		public Degrees map(Degrees input) throws Exception {
 
-			ValueComparator bvc =  new ValueComparator(input.getMap());
-			TreeMap<Long,Long> sortedDegrees = new TreeMap<>(bvc);
+			ValueComparator vc =  new ValueComparator(input.getMap());
+			TreeMap<Long,Long> sortedDegrees = new TreeMap<>(vc);
 			sortedDegrees.putAll(input.getMap());
 
 			int i = 0;
-			Degrees result = new Degrees(0, false);
+			Degrees result = new Degrees(false);
 
 			for (Map.Entry<Long, Long> entry : sortedDegrees.descendingMap().entrySet()) {
 				if (i >= TOP_DEGREES) {
@@ -92,7 +85,7 @@ public class DegreeCountMergeTreeExample {
 		}
 	}
 
-	private static final class DegreeCountMapper extends RichMapFunction<Degrees, Degrees> {
+	private static final class DegreeCountMapper implements MapFunction<Degrees, Degrees> {
 
 		Degrees degrees = null;
 		int self;
@@ -101,11 +94,10 @@ public class DegreeCountMergeTreeExample {
 
 		@Override
 		public Degrees map(Degrees input) throws Exception {
-			self = getRuntimeContext().getIndexOfThisSubtask();
 
 			// Propagate first input
 			if (degrees == null) {
-				degrees = new Degrees(self, input, true);
+				degrees = new Degrees(input, true);
 				return degrees;
 			}
 
@@ -130,27 +122,14 @@ public class DegreeCountMergeTreeExample {
 			long src = Math.min(edge.getSource(), edge.getTarget());
 			long trg = Math.max(edge.getSource(), edge.getTarget());
 
-			Degrees srcDegree = new Degrees(0, false);
+			Degrees srcDegree = new Degrees(false);
 			srcDegree.set(src, 1);
 
-			Degrees trgDegree = new Degrees(0, false);
+			Degrees trgDegree = new Degrees(false);
 			trgDegree.set(trg, 1);
 
 			out.collect(srcDegree);
 			out.collect(trgDegree);
-		}
-	}
-
-	private static final class MergeTreeKeySelector implements KeySelector<Degrees, Integer> {
-		private int level;
-
-		public MergeTreeKeySelector(int level) {
-			this.level = level;
-		}
-
-		@Override
-		public Integer getKey(Degrees input) throws Exception {
-			return input.getSource() >> (level + 1);
 		}
 	}
 

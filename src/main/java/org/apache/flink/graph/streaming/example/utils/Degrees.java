@@ -18,42 +18,36 @@
 
 package org.apache.flink.graph.streaming.example.utils;
 
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple2;
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class Degrees extends Tuple3<Integer, Map<Long, Long>, Boolean> {
+public class Degrees extends Tuple2<Map<Long, Long>, Boolean> {
 
 	public Degrees() {}
 
-	public Degrees(int source, boolean merge) {
-		this.f0 = source;
-		this.f1 = new HashMap<>();
-		this.f2 = merge;
+	public Degrees(boolean merge) {
+		this.f0 = new HashMap<>();
+		this.f1 = merge;
 	}
 
-	public Degrees(int source, Map<Long, Long> map, boolean merge) {
-		this.f0 = source;
-		this.f1 = map;
-		this.f2 = merge;
+	public Degrees(Map<Long, Long> map, boolean merge) {
+		this.f0 = map;
+		this.f1 = merge;
 	}
 
-	public Degrees(int source, Degrees input, boolean merge) throws Exception {
-		this(source, merge);
+	public Degrees(Degrees input, boolean merge) throws Exception {
+		this(merge);
 		this.set(input.getMap());
 	}
 
-	public int getSource() {
+	public Map<Long, Long> getMap() {
 		return this.f0;
 	}
 
-	public Map<Long, Long> getMap() {
-		return this.f1;
-	}
-
 	public boolean getMerge() {
-		return this.f2;
+		return this.f1;
 	}
 
 	public void set(Map<Long, Long> degrees) {

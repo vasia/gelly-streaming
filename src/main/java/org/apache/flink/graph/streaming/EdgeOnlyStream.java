@@ -21,7 +21,7 @@ package org.apache.flink.graph.streaming;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.RichMapFunction;
+import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -334,13 +334,13 @@ public class EdgeOnlyStream<K, EV> {
 	 * @param <T> the inner data type
 	 * @return an aggregated stream of the given data type
 	 */
-	public <T> DataStream<T> mergeTree(MapFunction<Edge<K, EV>, T> initMapper,
+	public <T> DataStream<T> mergeTree(FlatMapFunction<Edge<K, EV>, T> initMapper,
 			MapFunction<T, T> treeMapper, int windowSize) {
 		int dop = this.context.getParallelism();
 		int levels = (int) (Math.log(dop) / Math.log(2));
 
 		DataStream<Tuple2<Integer, T>> chainedStream = this.edges
-				.map(new MergeTreeWrapperMapper<>(initMapper));
+				.flatMap(new MergeTreeWrapperMapper<>(initMapper));
 
 
 		for (int i = 0; i < levels; ++i) {
@@ -358,23 +358,31 @@ public class EdgeOnlyStream<K, EV> {
 	}
 
 	private static final class MergeTreeWrapperMapper<K, EV, T>
-			extends RichMapFunction<Edge<K, EV>, Tuple2<Integer, T>>
+			extends RichFlatMapFunction<Edge<K, EV>, Tuple2<Integer, T>>
 			implements ResultTypeQueryable<Tuple2<Integer, T>> {
-		private final MapFunction<Edge<K, EV>, T> initMapper;
+		private final FlatMapFunction<Edge<K, EV>, T> initMapper;
 
-		public MergeTreeWrapperMapper(MapFunction<Edge<K, EV>, T> initMapper) {
+		public MergeTreeWrapperMapper(FlatMapFunction<Edge<K, EV>, T> initMapper) {
 			this.initMapper = initMapper;
 		}
 
 		@Override
-		public Tuple2<Integer, T> map(Edge<K, EV> edge) throws Exception {
-			return new Tuple2<>(getRuntimeContext().getIndexOfThisSubtask(), initMapper.map(edge));
+		public void flatMap(Edge<K, EV> edge, final Collector<Tuple2<Integer, T>> out) throws Exception {
+			initMapper.flatMap(edge, new Collector<T>() {
+				@Override
+				public void collect(T t) {
+					out.collect(new Tuple2<>(getRuntimeContext().getIndexOfThisSubtask(), t));
+				}
+
+				@Override
+				public void close() {}
+			});
 		}
 
 		@Override
 		public TypeInformation<Tuple2<Integer, T>> getProducedType() {
 			TypeInformation<Integer> keyType = TypeExtractor.getForClass(Integer.class);
-			TypeInformation<T> innerType = TypeExtractor.createTypeInfo(MapFunction.class,
+			TypeInformation<T> innerType = TypeExtractor.createTypeInfo(FlatMapFunction.class,
 					initMapper.getClass(), 1, null, null);
 
 			return new TupleTypeInfo<>(keyType, innerType);

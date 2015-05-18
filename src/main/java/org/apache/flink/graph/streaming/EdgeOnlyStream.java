@@ -36,6 +36,7 @@ import org.apache.flink.streaming.api.functions.RichWindowMapFunction;
 import org.apache.flink.streaming.api.windowing.helper.Count;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
+import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -86,10 +87,8 @@ public class EdgeOnlyStream<K, EV> {
 
 	private static final class EmitSrcAndTarget<K, EV>
 			implements FlatMapFunction<Edge<K, EV>, Vertex<K, NullValue>> {
-
 		@Override
 		public void flatMap(Edge<K, EV> edge, Collector<Vertex<K, NullValue>> out) throws Exception {
-
 			out.collect(new Vertex<>(edge.getSource(), NullValue.getInstance()));
 			out.collect(new Vertex<>(edge.getTarget(), NullValue.getInstance()));
 		}
@@ -97,7 +96,6 @@ public class EdgeOnlyStream<K, EV> {
 
 	private static final class FilterDistinctVertices<K>
 			implements FilterFunction<Vertex<K, NullValue>> {
-
 		Set<K> keys = new HashSet<>();
 
 		@Override
@@ -132,7 +130,6 @@ public class EdgeOnlyStream<K, EV> {
 
 	private static final class ApplyMapperToEdgeWithType<K, EV, NV>
 			implements MapFunction<Edge<K, EV>, Edge<K, NV>>, ResultTypeQueryable<Edge<K, NV>> {
-
 		private MapFunction<Edge<K, EV>, NV> innerMapper;
 		private transient TypeInformation<K> keyType;
 
@@ -164,7 +161,6 @@ public class EdgeOnlyStream<K, EV> {
 	 * @return the filtered graph stream.
 	 */
 	public EdgeOnlyStream<K, EV> filterVertices(FilterFunction<Vertex<K, NullValue>> filter) {
-
 		DataStream<Edge<K, EV>> remainingEdges = this.edges
 				.filter(new ApplyVertexFilterToEdges<K, EV>(filter));
 
@@ -173,7 +169,6 @@ public class EdgeOnlyStream<K, EV> {
 
 	private static final class ApplyVertexFilterToEdges<K, EV>
 			implements FilterFunction<Edge<K, EV>> {
-
 		private FilterFunction<Vertex<K, NullValue>> vertexFilter;
 
 		public ApplyVertexFilterToEdges(FilterFunction<Vertex<K, NullValue>> vertexFilter) {
@@ -182,7 +177,6 @@ public class EdgeOnlyStream<K, EV> {
 
 		@Override
 		public boolean filter(Edge<K, EV> edge) throws Exception {
-
 			boolean sourceVertexKept = vertexFilter.filter(new Vertex<>(edge.getSource(),
 					NullValue.getInstance()));
 			boolean targetVertexKept = vertexFilter.filter(new Vertex<>(edge.getTarget(),
@@ -199,11 +193,38 @@ public class EdgeOnlyStream<K, EV> {
 	 * @return the filtered graph stream.
 	 */
 	public EdgeOnlyStream<K, EV> filterEdges(FilterFunction<Edge<K, EV>> filter) {
-
-		DataStream<Edge<K, EV>> remainingEdges = this.edges
-				.filter(filter);
-
+		DataStream<Edge<K, EV>> remainingEdges = this.edges.filter(filter);
 		return new EdgeOnlyStream<>(remainingEdges, this.context);
+	}
+
+	/**
+	 * @return a continuously improving data stream representing the number of vertices in the streamed graph
+	 */
+	public DataStream<Long> numberOfVertices() {
+		return this.globalAggregate(new DegreeTypeSeparator<K, EV>(true, true),
+				new VertexCountMapper<K>(), true);
+	}
+
+	private static final class VertexCountMapper<K> implements MapFunction<Vertex<K, Long>, Long> {
+		private Set<K> vertices;
+
+		public VertexCountMapper() {
+			this.vertices = new HashSet<>();
+		}
+
+		@Override
+		public Long map(Vertex<K, Long> vertex) throws Exception {
+			vertices.add(vertex.getId());
+			return (long) vertices.size();
+		}
+	}
+
+	/**
+	 * @return a continuously improving data stream representing the number of edges in the streamed graph
+	 */
+	public DataStream<Long> numberOfEdges() {
+		// TODO
+		throw new NotImplementedException();
 	}
 
 	/**
@@ -241,7 +262,6 @@ public class EdgeOnlyStream<K, EV> {
 
 	private static final class DegreeTypeSeparator <K, EV>
 			implements FlatMapFunction<Edge<K, EV>, Vertex<K, Long>> {
-
 		private final boolean collectIn;
 		private final boolean collectOut;
 
@@ -277,6 +297,66 @@ public class EdgeOnlyStream<K, EV> {
 			}
 			localDegrees.put(key, localDegrees.get(key) + degree.getValue());
 			return new Vertex<>(key, localDegrees.get(key));
+		}
+	}
+
+	/**
+	 * The aggregate function splits the edge stream up into a vertex stream and applies
+	 * a mapper on the resulting vertices
+	 *
+	 * @param edgeMapper the mapper that converts the edge stream to a vertex stream
+	 * @param vertexMapper the mapper that aggregates vertex values
+	 * @param <VV> the vertex value used
+	 * @return a stream of vertices with the aggregated vertex value
+	 */
+	public <VV> DataStream<Vertex<K, VV>> aggregate(FlatMapFunction<Edge<K, EV>, Vertex<K, VV>> edgeMapper,
+			MapFunction<Vertex<K, VV>, Vertex<K, VV>> vertexMapper) {
+		return this.edges.flatMap(edgeMapper)
+				.groupBy(0)
+				.map(vertexMapper);
+	}
+
+	/**
+	 * Returns a global aggregate on the previously split vertex stream
+	 *
+	 * @param edgeMapper the mapper that converts the edge stream to a vertex stream
+	 * @param vertexMapper the mapper that aggregates vertex values
+	 * @param collectUpdates boolean specifying whether the aggregate should only be collected when there is an update
+	 * @param <VV> the return value type
+	 * @return a stream of the aggregated values
+	 */
+	public <VV> DataStream<VV> globalAggregate(FlatMapFunction<Edge<K, EV>, Vertex<K, VV>> edgeMapper,
+			MapFunction<Vertex<K, VV>, VV> vertexMapper, boolean collectUpdates) {
+
+		DataStream<VV> result = this.edges.flatMap(edgeMapper)
+				.setParallelism(1)
+				.map(vertexMapper)
+				.setParallelism(1);
+
+		if (collectUpdates) {
+			result = result.flatMap(new GlobalAggregateMapper<VV>())
+					.setParallelism(1);
+		}
+
+		return result;
+	}
+
+	private static final class GlobalAggregateMapper<VV> implements FlatMapFunction<VV, VV> {
+		VV previousValue;
+
+		public GlobalAggregateMapper() {
+			previousValue = null;
+		}
+
+		@Override
+		public void flatMap(VV vv, Collector<VV> out) throws Exception {
+			System.out.println("New: " + vv + ", Old: " + previousValue);
+
+			if (!vv.equals(previousValue)) {
+				System.out.println("Collecting!");
+				previousValue = vv;
+				out.collect(vv);
+			}
 		}
 	}
 
@@ -388,19 +468,4 @@ public class EdgeOnlyStream<K, EV> {
 		}
 	}
 
-	/**
-	 * The aggregate function splits the edge stream up into a vertex stream and applies
-	 * a mapper on the resulting vertices
-	 *
-	 * @param edgeMapper the mapper that converts the edge stream to a vertex stream
-	 * @param vertexMapper the mapper that aggregates vertex values
-	 * @param <VV> the vertex value used
-	 * @return a stream of vertices with the aggregated vertex value
-	 */
-	public <VV> DataStream<Vertex<K, VV>> aggregate(FlatMapFunction<Edge<K, EV>, Vertex<K, VV>> edgeMapper,
-			MapFunction<Vertex<K, VV>, Vertex<K, VV>> vertexMapper) {
-		return this.edges.flatMap(edgeMapper)
-				.groupBy(0)
-				.map(vertexMapper);
-	}
 }

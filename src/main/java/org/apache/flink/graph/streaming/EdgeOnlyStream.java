@@ -55,11 +55,6 @@ public class EdgeOnlyStream<K, EV> {
 
 	private final StreamExecutionEnvironment context;
 	private final DataStream<Edge<K, EV>> edges;
-	private final GraphConfiguration configuration;
-
-	private DataStream<Vertex<K, Long>> degrees;
-	private DataStream<Vertex<K, Long>> inDegrees;
-	private DataStream<Vertex<K, Long>> outDegrees;
 
 	/**
 	 * Creates a graph from an edge stream
@@ -70,81 +65,6 @@ public class EdgeOnlyStream<K, EV> {
 	public EdgeOnlyStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context) {
 		this.edges = edges;
 		this.context = context;
-		this.configuration = new GraphConfiguration();
-
-		this.degrees = null;
-		this.inDegrees = null;
-		this.outDegrees = null;
-	}
-
-	/**
-	 * Creates a graph from an edge stream, with a custom configuration
-	 *
-	 * @param edges a DataStream of edges.
-	 * @param context the flink execution environment.
-	 * @param configuration the custom properties of the streamed graph.
-	 */
-	public EdgeOnlyStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context,
-			GraphConfiguration configuration) {
-		this.edges = edges;
-		this.context = context;
-		this.configuration = configuration;
-
-		if (this.configuration.getCollectDegrees()) {
-			this.degrees = this.aggregate(new DegreeTypeSeparator<K, EV>(true, true),
-					new DegreeMapFunction<K>());
-		}
-
-		if (this.configuration.getCollectInDegrees()) {
-			this.inDegrees = this.aggregate(new DegreeTypeSeparator<K, EV>(true, false),
-					new DegreeMapFunction<K>());
-		}
-
-		if (this.configuration.getCollectOutDegrees()) {
-			this.outDegrees = this.aggregate(new DegreeTypeSeparator<K, EV>(false, true),
-					new DegreeMapFunction<K>());
-		}
-	}
-
-	private static final class DegreeTypeSeparator <K, EV>
-			implements FlatMapFunction<Edge<K, EV>, Vertex<K, Long>> {
-
-		private final boolean collectIn;
-		private final boolean collectOut;
-
-		public DegreeTypeSeparator(boolean collectIn, boolean collectOut) {
-			this.collectIn = collectIn;
-			this.collectOut = collectOut;
-		}
-
-		@Override
-		public void flatMap(Edge<K, EV> edge, Collector<Vertex<K, Long>> out) throws Exception {
-			if (collectOut) {
-				out.collect(new Vertex<>(edge.getSource(), 1L));
-			}
-			if (collectIn) {
-				out.collect(new Vertex<>(edge.getTarget(), 1L));
-			}
-		}
-	}
-
-	private static final class DegreeMapFunction <K>
-			implements MapFunction<Vertex<K, Long>, Vertex<K, Long>> {
-		private final Map<K, Long> localDegrees;
-
-		public DegreeMapFunction() {
-			localDegrees = new HashMap<>();
-		}
-
-		@Override
-		public Vertex<K, Long> map(Vertex<K, Long> degree) throws Exception {
-			K key = degree.getId();
-			if (!localDegrees.containsKey(key)) {
-				localDegrees.put(key, 0L);
-			}
-			localDegrees.put(key, localDegrees.get(key) + degree.getValue());
-			return new Vertex<>(key, localDegrees.get(key));
-		}
 	}
 
 	/**
@@ -293,10 +213,8 @@ public class EdgeOnlyStream<K, EV> {
 	 * @throws Exception
 	 */
 	public DataStream<Vertex<K, Long>> getDegrees() throws Exception {
-		if (!configuration.getCollectDegrees()) {
-			throw new Exception("Degrees are not collected in this graph stream");
-		}
-		return this.degrees;
+		return this.aggregate(new DegreeTypeSeparator<K, EV>(true, true),
+				new DegreeMapFunction<K>());
 	}
 
 	/**
@@ -306,10 +224,8 @@ public class EdgeOnlyStream<K, EV> {
 	 * @throws Exception
 	 */
 	public DataStream<Vertex<K, Long>> getInDegrees() throws Exception {
-		if (!configuration.getCollectInDegrees()) {
-			throw new Exception("In-degrees are not collected in this graph stream");
-		}
-		return this.inDegrees;
+		return this.aggregate(new DegreeTypeSeparator<K, EV>(true, false),
+				new DegreeMapFunction<K>());
 	}
 
 	/**
@@ -319,10 +235,49 @@ public class EdgeOnlyStream<K, EV> {
 	 * @throws Exception
 	 */
 	public DataStream<Vertex<K, Long>> getOutDegrees() throws Exception {
-		if (!configuration.getCollectOutDegrees()) {
-			throw new Exception("Out-degrees are not collected in this graph stream");
+		return this.aggregate(new DegreeTypeSeparator<K, EV>(false, true),
+				new DegreeMapFunction<K>());
+	}
+
+	private static final class DegreeTypeSeparator <K, EV>
+			implements FlatMapFunction<Edge<K, EV>, Vertex<K, Long>> {
+
+		private final boolean collectIn;
+		private final boolean collectOut;
+
+		public DegreeTypeSeparator(boolean collectIn, boolean collectOut) {
+			this.collectIn = collectIn;
+			this.collectOut = collectOut;
 		}
-		return this.outDegrees;
+
+		@Override
+		public void flatMap(Edge<K, EV> edge, Collector<Vertex<K, Long>> out) throws Exception {
+			if (collectOut) {
+				out.collect(new Vertex<>(edge.getSource(), 1L));
+			}
+			if (collectIn) {
+				out.collect(new Vertex<>(edge.getTarget(), 1L));
+			}
+		}
+	}
+
+	private static final class DegreeMapFunction <K>
+			implements MapFunction<Vertex<K, Long>, Vertex<K, Long>> {
+		private final Map<K, Long> localDegrees;
+
+		public DegreeMapFunction() {
+			localDegrees = new HashMap<>();
+		}
+
+		@Override
+		public Vertex<K, Long> map(Vertex<K, Long> degree) throws Exception {
+			K key = degree.getId();
+			if (!localDegrees.containsKey(key)) {
+				localDegrees.put(key, 0L);
+			}
+			localDegrees.put(key, localDegrees.get(key) + degree.getValue());
+			return new Vertex<>(key, localDegrees.get(key));
+		}
 	}
 
 	/**

@@ -20,7 +20,6 @@ package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
-import org.apache.flink.graph.streaming.GraphConfiguration;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
@@ -62,11 +61,8 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphConfiguration config = new GraphConfiguration();
-		config.setCollectDegrees(true);
-
 		EdgeOnlyStream<Long, Long> graph =
-				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env, config);
+				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph.getDegrees().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
@@ -93,11 +89,8 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphConfiguration config = new GraphConfiguration();
-		config.setCollectDegrees(true);
-
 		EdgeOnlyStream<Long, Long> graph =
-				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env, config);
+				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph.getInDegrees().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
@@ -117,11 +110,8 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphConfiguration config = new GraphConfiguration();
-		config.setCollectDegrees(true);
-
 		EdgeOnlyStream<Long, Long> graph =
-				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env, config);
+				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph.getOutDegrees().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();

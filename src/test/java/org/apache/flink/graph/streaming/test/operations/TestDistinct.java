@@ -18,9 +18,8 @@
 
 package org.apache.flink.graph.streaming.test.operations;
 
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.core.fs.FileSystem;
+import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -33,10 +32,12 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@RunWith(Parameterized.class)
-public class TestNumberOfEntities extends MultipleProgramsTestBase {
+import java.util.List;
 
-	public TestNumberOfEntities(TestExecutionMode mode) {
+@RunWith(Parameterized.class)
+public class TestDistinct extends MultipleProgramsTestBase {
+
+	public TestDistinct(TestExecutionMode mode) {
 		super(mode);
 	}
 
@@ -57,54 +58,28 @@ public class TestNumberOfEntities extends MultipleProgramsTestBase {
 	}
 
 	@Test
-	public void testNumberOfVertices() throws Exception {
+	public void testDistinct() throws Exception {
 		/*
-		 * Test numberOfVertices() with the sample graph
+		 * Test distinct() with the sample graph duplicated
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeOnlyStream<Long, Long> graph =
-				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
-
-		graph.numberOfVertices().map(new MapFunction<Long, Tuple1<Long>>() {
-			@Override
-			public Tuple1<Long> map(Long value) throws Exception {
-				return new Tuple1<>(value);
-			}
-		}).writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
-
-		env.execute();
-		expectedResult = "1\n" +
-				"2\n" +
-				"3\n" +
-				"4\n" +
-				"5\n";
-	}
-
-	@Test
-	public void testNumberOfEdges() throws Exception {
-		/*
-		 * Test numberOfEdges() with the sample graph
-	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+		List<Edge<Long, Long>> edges = GraphStreamTestUtils.getLongLongEdges();
+		edges.addAll(GraphStreamTestUtils.getLongLongEdges());
 
 		EdgeOnlyStream<Long, Long> graph =
-				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+				new EdgeOnlyStream<>(env.fromCollection(edges), env);
 
-		graph.numberOfEdges().map(new MapFunction<Long, Tuple1<Long>>() {
-			@Override
-			public Tuple1<Long> map(Long value) throws Exception {
-				return new Tuple1<>(value);
-			}
-		}).writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		graph.distinct().getEdges()
+				.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 
 		env.execute();
-		expectedResult = "1\n" +
-				"2\n" +
-				"3\n" +
-				"4\n" +
-				"5\n" +
-				"6\n" +
-				"7\n";
+		expectedResult = "1,2,12\n" +
+				"1,3,13\n" +
+				"2,3,23\n" +
+				"3,4,34\n" +
+				"3,5,35\n" +
+				"4,5,45\n" +
+				"5,1,51\n";
 	}
 }

@@ -36,7 +36,6 @@ import org.apache.flink.streaming.api.functions.RichWindowMapFunction;
 import org.apache.flink.streaming.api.windowing.helper.Count;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
-import sun.reflect.generics.reflectiveObjects.NotImplementedException;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -198,6 +197,35 @@ public class EdgeOnlyStream<K, EV> {
 	}
 
 	/**
+	 * Removes the duplicate edges by storing a neighborhood set for each vertex
+	 *
+	 * @return a graph stream with no duplicate edges
+	 */
+	public EdgeOnlyStream<K, EV> distinct() {
+		DataStream<Edge<K, EV>> edgeStream = this.edges
+				.groupBy(0)
+				.flatMap(new DistinctEdgeMapper<K, EV>());
+
+		return new EdgeOnlyStream<>(edgeStream, this.getContext());
+	}
+
+	private static final class DistinctEdgeMapper<K, EV> implements FlatMapFunction<Edge<K, EV>, Edge<K, EV>> {
+		private final Set<K> neighbors;
+
+		public DistinctEdgeMapper() {
+			this.neighbors = new HashSet<>();
+		}
+
+		@Override
+		public void flatMap(Edge<K, EV> edge, Collector<Edge<K, EV>> out) throws Exception {
+			if (!neighbors.contains(edge.getTarget())) {
+				neighbors.add(edge.getTarget());
+				out.collect(edge);
+			}
+		}
+	}
+
+	/**
 	 * @return a continuously improving data stream representing the number of vertices in the streamed graph
 	 */
 	public DataStream<Long> numberOfVertices() {
@@ -220,11 +248,24 @@ public class EdgeOnlyStream<K, EV> {
 	}
 
 	/**
-	 * @return a continuously improving data stream representing the number of edges in the streamed graph
+	 * @return a data stream representing the number of all edges in the streamed graph, including possible duplicates
 	 */
 	public DataStream<Long> numberOfEdges() {
-		// TODO
-		throw new NotImplementedException();
+		return this.edges.map(new TotalEdgeCountMapper<K, EV>()).setParallelism(1);
+	}
+
+	private static final class TotalEdgeCountMapper<K, EV> implements MapFunction<Edge<K, EV>, Long> {
+		private long edgeCount;
+
+		public TotalEdgeCountMapper() {
+			edgeCount = 0;
+		}
+
+		@Override
+		public Long map(Edge<K, EV> edge) throws Exception {
+			edgeCount++;
+			return edgeCount;
+		}
 	}
 
 	/**
@@ -350,10 +391,7 @@ public class EdgeOnlyStream<K, EV> {
 
 		@Override
 		public void flatMap(VV vv, Collector<VV> out) throws Exception {
-			System.out.println("New: " + vv + ", Old: " + previousValue);
-
 			if (!vv.equals(previousValue)) {
-				System.out.println("Collecting!");
 				previousValue = vv;
 				out.collect(vv);
 			}

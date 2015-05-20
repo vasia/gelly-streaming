@@ -226,6 +226,36 @@ public class EdgeOnlyStream<K, EV> {
 	}
 
 	/**
+	 * @return a graph stream with the edge directions reversed
+	 */
+	public EdgeOnlyStream<K, EV> reverse() {
+		return new EdgeOnlyStream<>(this.edges.map(new ReverseEdgeMapper<K, EV>()), this.getContext());
+	}
+
+	private static final class ReverseEdgeMapper<K, EV> implements MapFunction<Edge<K, EV>, Edge<K, EV>> {
+		@Override
+		public Edge<K, EV> map(Edge<K, EV> edge) throws Exception {
+			return edge.reverse();
+		}
+	}
+
+	/**
+	 * @param graph the streamed graph to union with
+	 * @return a streamed graph where the two edge streams are merged
+	 */
+	@SuppressWarnings("unchecked")
+	public EdgeOnlyStream<K, EV> union(EdgeOnlyStream<K, EV> graph) {
+		return new EdgeOnlyStream<>(this.edges.merge(graph.getEdges()), this.getContext());
+	}
+
+	/**
+	 * @return a graph stream where edges are undirected
+	 */
+	public EdgeOnlyStream<K, EV> undirected() {
+		return this.union(this.reverse());
+	}
+
+	/**
 	 * @return a continuously improving data stream representing the number of vertices in the streamed graph
 	 */
 	public DataStream<Long> numberOfVertices() {

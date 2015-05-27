@@ -18,34 +18,33 @@
 
 package org.apache.flink.graph.streaming.example.utils;
 
-import org.apache.flink.api.java.tuple.Tuple5;
-import org.apache.flink.api.java.tuple.Tuple7;
+import org.apache.flink.api.java.tuple.Tuple4;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.example.DistributedWeightedMatchingExample;
 
-public class MatchingEvent extends Tuple5<Long, MatchingEvent.Type,
-		Edge<Long, Long>, Edge<Long, Long>, Edge<Long, Long>> {
+import java.util.HashSet;
+import java.util.Set;
 
-	public enum Type {ADD, REMOVE, REPLACE}
+public class MatchingEvent extends Tuple4<Long, MatchingEvent.Type, Edge<Long, Long>, Set<Edge<Long, Long>>> {
+
+	public enum Type {INIT, ADD, REMOVE, REPLACE, UNLOCK}
 
 	public MatchingEvent() {}
 
-	public MatchingEvent(boolean toMaster, MatchingEvent.Type type, Edge<Long, Long> edge,
-			Edge<Long, Long> collisionA, Edge<Long, Long> collisionB) {
-
-		this.f0 = hash(edge, toMaster);
+	public MatchingEvent(long target, MatchingEvent.Type type,
+			Edge<Long, Long> edge, Set<Edge<Long, Long>> collisions) throws Exception {
+		this.f0 = target;
 		this.f1 = type;
 		this.f2 = edge;
-		this.f3 = collisionA;
-		this.f4 = collisionB;
+		this.f3 = collisions;
 	}
 
-	public MatchingEvent(MatchingEvent.Type type, Edge<Long, Long> edge) {
-		this.f0 = hash(edge, true);
+	public MatchingEvent(long target, MatchingEvent.Type type, Edge<Long, Long> edge) throws Exception {
+		this.f0 = target;
 		this.f1 = type;
 		this.f2 = edge;
-		this.f3 = edge;
-		this.f4 = edge;
+
+		Set<Edge<Long, Long>> empty = new HashSet<>();
+		this.f3 = empty;
 	}
 
 	public long getTarget() {
@@ -60,21 +59,8 @@ public class MatchingEvent extends Tuple5<Long, MatchingEvent.Type,
 		return this.f2;
 	}
 
-	public Edge<Long, Long> getCollisionA() {
+	public Set<Edge<Long, Long>> getCollisions() {
 		return this.f3;
 	}
 
-	public Edge<Long, Long> getCollisionB() {
-		return this.f4;
-	}
-
-	private long hash(Edge<Long, Long> edge, boolean master) {
-		int p = DistributedWeightedMatchingExample.PARALLELISM;
-		long h1 = edge.getSource().hashCode() % p;
-
-		//long h2 = edge.getTarget().hashCode() % p;
-		long h2 = (h1 + 1) % p;
-
-		return master ? h1 : h2;
-	}
 }

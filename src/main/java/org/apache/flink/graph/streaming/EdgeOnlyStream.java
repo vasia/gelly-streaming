@@ -263,7 +263,7 @@ public class EdgeOnlyStream<K, EV> {
 				new VertexCountMapper<K>(), true);
 	}
 
-	private static final class VertexCountMapper<K> implements MapFunction<Vertex<K, Long>, Long> {
+	private static final class VertexCountMapper<K> implements FlatMapFunction<Vertex<K, Long>, Long> {
 		private Set<K> vertices;
 
 		public VertexCountMapper() {
@@ -271,9 +271,9 @@ public class EdgeOnlyStream<K, EV> {
 		}
 
 		@Override
-		public Long map(Vertex<K, Long> vertex) throws Exception {
+		public void flatMap(Vertex<K, Long> vertex, Collector<Long> out) throws Exception {
 			vertices.add(vertex.getId());
-			return (long) vertices.size();
+			out.collect((long) vertices.size());
 		}
 	}
 
@@ -397,11 +397,11 @@ public class EdgeOnlyStream<K, EV> {
 	 * @return a stream of the aggregated values
 	 */
 	public <VV> DataStream<VV> globalAggregate(FlatMapFunction<Edge<K, EV>, Vertex<K, VV>> edgeMapper,
-			MapFunction<Vertex<K, VV>, VV> vertexMapper, boolean collectUpdates) {
+			FlatMapFunction<Vertex<K, VV>, VV> vertexMapper, boolean collectUpdates) {
 
 		DataStream<VV> result = this.edges.flatMap(edgeMapper)
 				.setParallelism(1)
-				.map(vertexMapper)
+				.flatMap(vertexMapper)
 				.setParallelism(1);
 
 		if (collectUpdates) {

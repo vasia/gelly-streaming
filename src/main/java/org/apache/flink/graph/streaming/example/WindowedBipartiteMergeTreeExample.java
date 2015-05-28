@@ -30,6 +30,9 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -37,7 +40,7 @@ import java.util.Map;
 
 public class WindowedBipartiteMergeTreeExample {
 
-	public WindowedBipartiteMergeTreeExample() throws Exception {
+	public WindowedBipartiteMergeTreeExample() throws Exception  {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 		env.setParallelism(4);
 
@@ -59,7 +62,7 @@ public class WindowedBipartiteMergeTreeExample {
 				.print();
 
 		JobExecutionResult res = env.execute("Distributed Merge Tree Sandbox");
-		System.out.println("Runtime: " + res.getNetRuntime());
+		System.out.println("Result: " + res.getNetRuntime());
 	}
 
 	private static final class BipartitenessMapper implements MapFunction<Candidate, Candidate> {

@@ -22,15 +22,19 @@ import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
 import org.apache.flink.graph.streaming.example.utils.Degrees;
+import org.apache.flink.graph.streaming.example.utils.MatchingEvent;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 public class CentralizedWeightedMatchingExample {
@@ -41,111 +45,70 @@ public class CentralizedWeightedMatchingExample {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
 		// Source: http://grouplens.org/datasets/movielens/
-		DataStream<Edge<Long, NullValue>> edges = env
+		DataStream<Edge<Long, Long>> edges = env
 				.readTextFile("movielens_10k_sorted.txt")
-				.map(new MapFunction<String, Edge<Long, NullValue>>() {
+				.map(new MapFunction<String, Edge<Long, Long>>() {
 					@Override
-					public Edge<Long, NullValue> map(String s) throws Exception {
+					public Edge<Long, Long> map(String s) throws Exception {
 						String[] args = s.split("\t");
 						long src = Long.parseLong(args[0]);
 						long trg = Long.parseLong(args[1]) + 1000000;
-						return new Edge<>(src, trg, NullValue.getInstance());
+						long val = Long.parseLong(args[2]) * 10;
+						return new Edge<>(src, trg, val);
 					}
 				});
 
 
-		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edges, env);
-		graph.mergeTree(new InitDegreeMapper(), new DegreeCountMapper(), 10000)
-				.print();
+		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(edges, env);
+
+		graph.getEdges()
+				.flatMap(new WeightedMatchingFlatMapper()).setParallelism(1)
+				.print().setParallelism(1);
 
 		JobExecutionResult res = env.execute("Distributed Merge Tree Sandbox");
 		long runtime = res.getNetRuntime();
 		System.out.println("Runtime: " + runtime);
 	}
 
-	private static final class TopDegreeMapper implements MapFunction<Degrees, Degrees> {
+	private static final class WeightedMatchingFlatMapper
+			implements FlatMapFunction<Edge<Long,Long>, MatchingEvent> {
+		private Set<Edge<Long, Long>> localMatching;
+
+		public WeightedMatchingFlatMapper() {
+			localMatching = new HashSet<>();
+		}
+
 		@Override
-		public Degrees map(Degrees input) throws Exception {
+		public void flatMap(Edge<Long, Long> edge, Collector<MatchingEvent> out) throws Exception {
 
-			ValueComparator vc =  new ValueComparator(input.getMap());
-			TreeMap<Long,Long> sortedDegrees = new TreeMap<>(vc);
-			sortedDegrees.putAll(input.getMap());
-
-			int i = 0;
-			Degrees result = new Degrees(false);
-
-			for (Map.Entry<Long, Long> entry : sortedDegrees.descendingMap().entrySet()) {
-				if (i >= TOP_DEGREES) {
-					break;
+			// Find collisions
+			Set<Edge<Long, Long>> collisions = new HashSet<>();
+			for (Edge<Long, Long> localEdge : localMatching) {
+				if (localEdge.getSource().equals(edge.getSource())
+						|| localEdge.getSource().equals(edge.getTarget())
+						|| localEdge.getTarget().equals(edge.getSource())
+						|| localEdge.getTarget().equals(edge.getTarget())) {
+					collisions.add(localEdge);
 				}
-				result.set(entry.getKey(), entry.getValue());
-				i++;
-			}
-			return result;
-		}
-	}
-
-	private static final class DegreeCountMapper implements MapFunction<Degrees, Degrees> {
-
-		Degrees degrees = null;
-		int self;
-
-		public DegreeCountMapper() { }
-
-		@Override
-		public Degrees map(Degrees input) throws Exception {
-
-			// Propagate first input
-			if (degrees == null) {
-				degrees = new Degrees(input, true);
-				return degrees;
 			}
 
-			// Merge or sum new degrees
-			if (input.getMerge()) {
-				// Merge degrees
-				degrees.set(input.getMap());
-				return degrees;
-			} else {
-				// Sum degrees
-				degrees.add(input.getMap());
-				return degrees;
+			// Calculate sum
+			long sum = 0;
+			for (Edge<Long, Long> collidingEdge : collisions) {
+				sum += collidingEdge.getValue();
 			}
-		}
-	}
 
-	private static final class InitDegreeMapper implements
-			FlatMapFunction<Edge<Long,NullValue>, Degrees> {
+			if (edge.getValue() > 2 * sum) {
 
-		@Override
-		public void flatMap(Edge<Long, NullValue> edge, Collector<Degrees> out) throws Exception {
-			long src = Math.min(edge.getSource(), edge.getTarget());
-			long trg = Math.max(edge.getSource(), edge.getTarget());
+				// Remove collisions
+				for (Edge<Long, Long> collidingEdge : collisions) {
+					localMatching.remove(collidingEdge);
+					out.collect(new MatchingEvent(MatchingEvent.Type.REMOVE, collidingEdge));
+				}
 
-			Degrees srcDegree = new Degrees(false);
-			srcDegree.set(src, 1);
-
-			Degrees trgDegree = new Degrees(false);
-			trgDegree.set(trg, 1);
-
-			out.collect(srcDegree);
-			out.collect(trgDegree);
-		}
-	}
-
-	private static final class ValueComparator implements Comparator<Long> {
-
-		Map<Long, Long> base;
-		public ValueComparator(Map<Long, Long> base) {
-			this.base = base;
-		}
-
-		@Override
-		public int compare(Long a, Long b) {
-			if (base.get(a) >= base.get(b)) {
-				return 1;
+				localMatching.add(edge);
+				out.collect(new MatchingEvent(MatchingEvent.Type.ADD, edge));
 			}
-			return -1;
 		}
 	}
 

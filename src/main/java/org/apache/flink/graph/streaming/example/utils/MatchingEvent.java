@@ -19,48 +19,24 @@
 package org.apache.flink.graph.streaming.example.utils;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.Edge;
 
-import java.util.HashMap;
-import java.util.Map;
+public class MatchingEvent extends Tuple2<MatchingEvent.Type, Edge<Long, Long>> {
 
-public class MatchingEvent extends Tuple2<Map<Long, Long>, Boolean> {
+	public enum Type {ADD, REMOVE};
 
 	public MatchingEvent() {}
 
-	public MatchingEvent(boolean merge) {
-		this.f0 = new HashMap<>();
-		this.f1 = merge;
+	public MatchingEvent(MatchingEvent.Type type, Edge<Long, Long> edge) throws Exception {
+		this.f0 = type;
+		this.f1 = edge;
 	}
 
-	public MatchingEvent(MatchingEvent input, boolean merge) throws Exception {
-		this(merge);
-		this.set(input.getMap());
-	}
-
-	public Map<Long, Long> getMap() {
+	public MatchingEvent.Type geType() {
 		return this.f0;
 	}
 
-	public boolean getMerge() {
+	public Edge<Long, Long> getEdge() {
 		return this.f1;
-	}
-
-	public void set(Map<Long, Long> degrees) {
-		for (Map.Entry<Long, Long> entry : degrees.entrySet()) {
-			this.set(entry.getKey(), entry.getValue());
-		}
-	}
-
-	public void set(long vertex, long degree) {
-		this.getMap().put(vertex, degree);
-	}
-
-	public void add(Map<Long, Long> degrees) {
-		for (Map.Entry<Long, Long> entry : degrees.entrySet()) {
-			if (!this.getMap().containsKey(entry.getKey())) {
-				this.getMap().put(entry.getKey(), 0L);
-			}
-			this.getMap().put(entry.getKey(), this.getMap().get(entry.getKey()) + entry.getValue());
-		}
 	}
 }

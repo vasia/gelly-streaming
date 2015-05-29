@@ -58,7 +58,6 @@ public class CentralizedWeightedMatchingExample {
 					}
 				});
 
-
 		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(edges, env);
 
 		graph.getEdges()

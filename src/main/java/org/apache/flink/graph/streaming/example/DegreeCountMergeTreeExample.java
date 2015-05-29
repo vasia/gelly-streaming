@@ -35,8 +35,6 @@ import java.util.TreeMap;
 
 public class DegreeCountMergeTreeExample {
 
-	public static final long TOP_DEGREES = 11;
-
 	public DegreeCountMergeTreeExample() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
@@ -55,34 +53,12 @@ public class DegreeCountMergeTreeExample {
 
 
 		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edges, env);
-		graph.mergeTree(new InitDegreeMapper(), new DegreeCountMapper(), 10000)
-				.print();
+		graph.mergeTree(new InitDegreeMapper(), new DegreeCountMapper(), 10000);
+				//.print();
 
 		JobExecutionResult res = env.execute("Distributed Merge Tree Sandbox");
 		long runtime = res.getNetRuntime();
 		System.out.println("Runtime: " + runtime);
-	}
-
-	private static final class TopDegreeMapper implements MapFunction<Degrees, Degrees> {
-		@Override
-		public Degrees map(Degrees input) throws Exception {
-
-			ValueComparator vc =  new ValueComparator(input.getMap());
-			TreeMap<Long,Long> sortedDegrees = new TreeMap<>(vc);
-			sortedDegrees.putAll(input.getMap());
-
-			int i = 0;
-			Degrees result = new Degrees(false);
-
-			for (Map.Entry<Long, Long> entry : sortedDegrees.descendingMap().entrySet()) {
-				if (i >= TOP_DEGREES) {
-					break;
-				}
-				result.set(entry.getKey(), entry.getValue());
-				i++;
-			}
-			return result;
-		}
 	}
 
 	private static final class DegreeCountMapper implements MapFunction<Degrees, Degrees> {
@@ -130,22 +106,6 @@ public class DegreeCountMergeTreeExample {
 
 			out.collect(srcDegree);
 			out.collect(trgDegree);
-		}
-	}
-
-	private static final class ValueComparator implements Comparator<Long> {
-
-		Map<Long, Long> base;
-		public ValueComparator(Map<Long, Long> base) {
-			this.base = base;
-		}
-
-		@Override
-		public int compare(Long a, Long b) {
-			if (base.get(a) >= base.get(b)) {
-				return 1;
-			}
-			return -1;
 		}
 	}
 

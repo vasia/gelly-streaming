@@ -20,6 +20,9 @@ import java.util.Map;
 
 public class BroadcastTriangleCount {
 
+	public static final int VERTEX_COUNT = 3000;
+	public final String graphFile = "big_random_graph.txt";
+
 	public BroadcastTriangleCount() throws Exception {
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
@@ -28,7 +31,7 @@ public class BroadcastTriangleCount {
 		//   - 100 vertices
 		//   - 954 edges
 		//   - 884 triangles
-		DataStream<Edge<Long, NullValue>> edges = env.readTextFile("big_random_graph.txt")
+		DataStream<Edge<Long, NullValue>> edges = env.readTextFile(graphFile)
 				.flatMap(new FlatMapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public void flatMap(String s, Collector<Edge<Long, NullValue>> out) throws Exception {
@@ -42,7 +45,7 @@ public class BroadcastTriangleCount {
 				});
 
 		final int p = env.getParallelism();
-		final int totalSize = 20000;
+		final int totalSize = 45000;
 		final int instanceSize = totalSize / p;
 
 		DataStream<TriangleEstimate> results = edges
@@ -60,13 +63,15 @@ public class BroadcastTriangleCount {
 
 	private static final class TriangleSampler extends RichFlatMapFunction<Edge<Long, NullValue>, TriangleEstimate> {
 		private List<SampleTriangleState> states;
-		private List<Long> vertices;
-		private int edgeCount = 0;
+		// private List<Long> vertices;
+		private int edgeCount;
+		private int previousResult;
 
 		public TriangleSampler(int size) {
 			this.states = new ArrayList<>();
-			this.vertices = new ArrayList<>();
+			// this.vertices = new ArrayList<>();
 			this.edgeCount = 0;
+			this.previousResult = 0;
 
 			for (int i = 0; i < size; ++i) {
 				states.add(new SampleTriangleState());
@@ -79,12 +84,14 @@ public class BroadcastTriangleCount {
 			edgeCount++;
 
 			// Update vertices
+			/*
 			if (!vertices.contains(edge.getSource())) {
 				vertices.add(edge.getSource());
 			}
 			if (!vertices.contains(edge.getTarget())) {
 				vertices.add(edge.getTarget());
 			}
+			*/
 
 			int localBetaSum = 0;
 
@@ -92,24 +99,23 @@ public class BroadcastTriangleCount {
 			for (SampleTriangleState state : states) {
 
 				// Flip a coin and with probability 1/i sample a candidate
-				if (vertices.size() > 2) {
-					if (Coin.flip(state)) {
-						state.srcVertex = edge.getSource();
-						state.trgVertex = edge.getTarget();
+				if (Coin.flip(state)) {
+					state.srcVertex = edge.getSource();
+					state.trgVertex = edge.getTarget();
 
-						// Randomly sample the third vertex from V \ {src, trg}
-						while (true) {
-							state.thirdVertex = vertices.get((int) Math.floor(Math.random() * vertices.size()));
+					// Randomly sample the third vertex from V \ {src, trg}
+					while (true) {
+						// state.thirdVertex = vertices.get((int) Math.floor(Math.random() * vertices.size()));
+						state.thirdVertex = (int) Math.floor(Math.random() * VERTEX_COUNT);
 
-							if (state.thirdVertex != state.srcVertex && state.thirdVertex != state.trgVertex) {
-								break;
-							}
+						if (state.thirdVertex != state.srcVertex && state.thirdVertex != state.trgVertex) {
+							break;
 						}
-
-						state.srcEdgeFound = false;
-						state.trgEdgeFound = false;
-						state.beta = 0;
 					}
+
+					state.srcEdgeFound = false;
+					state.trgEdgeFound = false;
+					state.beta = 0;
 				}
 
 				if (state.beta == 0) {
@@ -132,9 +138,11 @@ public class BroadcastTriangleCount {
 				}
 			}
 
-			if (localBetaSum != 0) {
+			if (localBetaSum != previousResult) {
+				previousResult = localBetaSum;
+
 				int source = getRuntimeContext().getIndexOfThisSubtask();
-				out.collect(new TriangleEstimate(source, edgeCount, vertices.size(), localBetaSum));
+				out.collect(new TriangleEstimate(source, edgeCount, VERTEX_COUNT, localBetaSum));
 			}
 		}
 	}

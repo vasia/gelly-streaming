@@ -22,6 +22,9 @@ import java.util.Random;
 
 public class IncidenceSamplingTriangleCount {
 
+	public static final int VERTEX_COUNT = 3000;
+	public final String graphFile = "big_random_graph.txt";
+
 	public IncidenceSamplingTriangleCount() throws Exception {
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
@@ -30,7 +33,7 @@ public class IncidenceSamplingTriangleCount {
 		//   - 100 vertices
 		//   - 954 edges
 		//   - 884 triangles
-		DataStream<Edge<Long, NullValue>> edges = env.readTextFile("big_random_graph.txt")
+		DataStream<Edge<Long, NullValue>> edges = env.readTextFile(graphFile)
 				.flatMap(new FlatMapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public void flatMap(String s, Collector<Edge<Long, NullValue>> out) throws Exception {
@@ -44,7 +47,7 @@ public class IncidenceSamplingTriangleCount {
 				});
 
 		final int p = env.getParallelism();
-		final int totalSize = 10000;
+		final int totalSize = 45000;
 		final int instanceSize = totalSize / p;
 
 		DataStream<TriangleEstimate> results = edges
@@ -53,13 +56,9 @@ public class IncidenceSamplingTriangleCount {
 				.groupBy(0)
 				.flatMap(new TriangleSampleMapper(instanceSize));
 
-		results.print();
-
-		/*
 		// Extract deltaBeta and sequence number
 		results.flatMap(new TriangleSummer(totalSize)).setParallelism(1)
 				.print().setParallelism(1);
-		*/
 
 		// The output format is <edge count, triangle estimate>
 		JobExecutionResult res = env.execute("Streaming Triangle Count (Estimate)");
@@ -122,13 +121,15 @@ public class IncidenceSamplingTriangleCount {
 
 	private static final class TriangleSampleMapper extends RichFlatMapFunction<SampledEdge, TriangleEstimate> {
 		private List<SampleTriangleState> states;
-		private List<Long> vertices;
-		private int edgeCount = 0;
+		// private List<Long> vertices;
+		private int edgeCount;
+		private int previousResult;
 
 		public TriangleSampleMapper(int size) {
 			this.states = new ArrayList<>();
-			this.vertices = new ArrayList<>();
+			// this.vertices = new ArrayList<>();
 			this.edgeCount = 0;
+			this.previousResult = 0;
 
 			for (int i = 0; i < size; ++i) {
 				states.add(new SampleTriangleState());
@@ -143,23 +144,26 @@ public class IncidenceSamplingTriangleCount {
 			edgeCount = input.getEdgeCount();
 
 			// Update vertices
+			/*
 			if (!vertices.contains(edge.getSource())) {
 				vertices.add(edge.getSource());
 			}
 			if (!vertices.contains(edge.getTarget())) {
 				vertices.add(edge.getTarget());
 			}
+			*/
 
 			SampleTriangleState state = states.get(input.getInstance());
 
 			// With probability 1/i sample a candidate (already flipped the coin during partitioning)
-			if (input.isResampled() && vertices.size() > 2) {
+			if (input.isResampled()) {
 				state.srcVertex = edge.getSource();
 				state.trgVertex = edge.getTarget();
 
 				// Randomly sample the third vertex from V \ {src, trg}
 				while (true) {
-					state.thirdVertex = vertices.get((int) Math.floor(Math.random() * vertices.size()));
+					// state.thirdVertex = vertices.get((int) Math.floor(Math.random() * vertices.size()));
+					state.thirdVertex = (int) Math.floor(Math.random() * VERTEX_COUNT);
 
 					if (state.thirdVertex != state.srcVertex && state.thirdVertex != state.trgVertex) {
 						break;
@@ -193,9 +197,11 @@ public class IncidenceSamplingTriangleCount {
 				localBetaSum += s.beta;
 			}
 
-			if (localBetaSum != 0) {
+			if (localBetaSum != previousResult) {
+				previousResult = localBetaSum;
+
 				int source = getRuntimeContext().getIndexOfThisSubtask();
-				out.collect(new TriangleEstimate(source, edgeCount, vertices.size(), localBetaSum));
+				out.collect(new TriangleEstimate(source, edgeCount, VERTEX_COUNT, localBetaSum));
 			}
 		}
 	}

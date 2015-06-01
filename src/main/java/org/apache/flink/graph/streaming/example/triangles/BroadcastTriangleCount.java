@@ -1,5 +1,6 @@
 package org.apache.flink.graph.streaming.example.triangles;
 
+import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
@@ -17,9 +18,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class StreamTriangleCount {
+public class BroadcastTriangleCount {
 
-	public StreamTriangleCount() throws Exception {
+	public BroadcastTriangleCount() throws Exception {
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
@@ -40,19 +41,21 @@ public class StreamTriangleCount {
 					}
 				});
 
-		final int instanceSize = 95000 / env.getParallelism();
-		final int totalSize = instanceSize * env.getParallelism();
+		final int p = env.getParallelism();
+		final int totalSize = 20000;
+		final int instanceSize = totalSize / p;
 
 		DataStream<TriangleEstimate> results = edges
 				.broadcast()
 				.flatMap(new TriangleSampler(instanceSize));
 
 		// Extract deltaBeta and sequence number
-		results.map(new TriangleSummer(totalSize)).setParallelism(1)
+		results.flatMap(new TriangleSummer(totalSize)).setParallelism(1)
 				.print().setParallelism(1);
 
-		// The output format is <sequence number, triangle estimate>
-		env.execute("Streaming Triangle Count (Estimate)");
+		// The output format is <edge count, triangle estimate>
+		JobExecutionResult res = env.execute("Streaming Triangle Count (Estimate)");
+		System.out.println("Runtime: " + res.getNetRuntime());
 	}
 
 	private static final class TriangleSampler extends RichFlatMapFunction<Edge<Long, NullValue>, TriangleEstimate> {
@@ -105,21 +108,24 @@ public class StreamTriangleCount {
 
 						state.srcEdgeFound = false;
 						state.trgEdgeFound = false;
+						state.beta = 0;
 					}
 				}
 
-				// Check if any of the two remaining edges in the candidate has been found
-				if ((edge.getSource() == state.srcVertex && edge.getTarget() == state.thirdVertex)
-						|| (edge.getSource() == state.thirdVertex && edge.getTarget() == state.srcVertex)) {
-					state.srcEdgeFound = true;
-				}
+				if (state.beta == 0) {
+					// Check if any of the two remaining edges in the candidate has been found
+					if ((edge.getSource() == state.srcVertex && edge.getTarget() == state.thirdVertex)
+							|| (edge.getSource() == state.thirdVertex && edge.getTarget() == state.srcVertex)) {
+						state.srcEdgeFound = true;
+					}
 
-				if ((edge.getSource() == state.trgVertex && edge.getTarget() == state.thirdVertex)
-						|| (edge.getSource() == state.thirdVertex && edge.getTarget() == state.trgVertex)) {
-					state.trgEdgeFound = true;
-				}
+					if ((edge.getSource() == state.trgVertex && edge.getTarget() == state.thirdVertex)
+							|| (edge.getSource() == state.thirdVertex && edge.getTarget() == state.trgVertex)) {
+						state.trgEdgeFound = true;
+					}
 
-				state.beta = (state.srcEdgeFound && state.trgEdgeFound) ? 1 : 0;
+					state.beta = (state.srcEdgeFound && state.trgEdgeFound) ? 1 : 0;
+				}
 
 				if (state.beta == 1) {
 					localBetaSum++;
@@ -134,21 +140,23 @@ public class StreamTriangleCount {
 	}
 
 	private static final class TriangleSummer
-			implements MapFunction<TriangleEstimate, Tuple2<Integer, Integer>> {
+			implements FlatMapFunction<TriangleEstimate, Tuple2<Integer, Integer>> {
 		private Map<Integer, TriangleEstimate> results;
 		private int maxEdges;
 		private int maxVertices;
 		private int sampleSize;
+		private int previousResult;
 
 		public TriangleSummer(int sampleSize) {
 			this.results = new HashMap<>();
 			this.maxEdges = 0;
 			this.maxVertices = 0;
 			this.sampleSize = sampleSize;
+			this.previousResult = 0;
 		}
 
 		@Override
-		public Tuple2<Integer, Integer> map(TriangleEstimate estimate) throws Exception {
+		public void flatMap(TriangleEstimate estimate, Collector<Tuple2<Integer, Integer>> out) throws Exception {
 			results.put(estimate.getSource(), estimate);
 
 			if (estimate.getEdgeCount() > maxEdges) {
@@ -165,7 +173,10 @@ public class StreamTriangleCount {
 			}
 
 			int result = (int) ((1.0 / (double) sampleSize) * globalBetaSum * maxEdges * (maxVertices - 2));
-			return new Tuple2<>(maxEdges, result);
+			if (result != previousResult) {
+				previousResult = result;
+				out.collect(new Tuple2<>(maxEdges, result));
+			}
 
 		}
 	}
@@ -203,6 +214,6 @@ public class StreamTriangleCount {
 	}
 
 	public static void main(String[] args) throws Exception {
-		new StreamTriangleCount();
+		new BroadcastTriangleCount();
 	}
 }

@@ -16,31 +16,21 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example;
+package org.apache.flink.graph.streaming.example.degrees;
 
 import org.apache.flink.api.common.JobExecutionResult;
-import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
-import org.apache.flink.graph.streaming.example.utils.Degrees;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
-import org.apache.flink.util.Collector;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.util.Comparator;
-import java.util.Map;
-import java.util.TreeMap;
-
-public class DegreeCountAggregateExample {
+public class DegreeCountAggregate {
 
 	private int p;
 
-	public DegreeCountAggregateExample(int p) throws Exception {
+	public DegreeCountAggregate(int p) throws Exception {
 		this.p = p;
 	}
 
@@ -72,7 +62,7 @@ public class DegreeCountAggregateExample {
 
 	public static void main(String[] args) throws Exception {
 
-		DegreeCountAggregateExample dc = new DegreeCountAggregateExample(4);
+		DegreeCountAggregate dc = new DegreeCountAggregate(4);
 		long res = dc.run();
 		System.out.println("Result: " + res);
 

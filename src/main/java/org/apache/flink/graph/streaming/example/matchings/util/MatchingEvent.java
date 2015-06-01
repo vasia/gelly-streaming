@@ -16,27 +16,27 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.utils;
+package org.apache.flink.graph.streaming.example.matchings.util;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.Edge;
 
-public class SignedVertex extends Tuple2<Long, Boolean> {
+public class MatchingEvent extends Tuple2<MatchingEvent.Type, Edge<Long, Long>> {
 
-	public SignedVertex() {}
+	public enum Type {ADD, REMOVE};
 
-	public SignedVertex(long vertex, boolean sign) {
-		super(vertex, sign);
+	public MatchingEvent() {}
+
+	public MatchingEvent(MatchingEvent.Type type, Edge<Long, Long> edge) throws Exception {
+		this.f0 = type;
+		this.f1 = edge;
 	}
 
-	public long getVertex() {
+	public MatchingEvent.Type geType() {
 		return this.f0;
 	}
 
-	public boolean getSign() {
+	public Edge<Long, Long> getEdge() {
 		return this.f1;
-	}
-
-	public SignedVertex reverse() {
-		return new SignedVertex(this.getVertex(), !this.getSign());
 	}
 }

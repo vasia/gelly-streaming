@@ -1,11 +1,11 @@
-package org.apache.flink.graph.streaming.example;
+package org.apache.flink.graph.streaming.example.triangles;
 
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.example.utils.TriangleEstimate;
+import org.apache.flink.graph.streaming.example.triangles.util.TriangleEstimate;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
@@ -17,9 +17,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class StreamTriangleCountExample {
+public class StreamTriangleCount {
 
-	public StreamTriangleCountExample() throws Exception {
+	public StreamTriangleCount() throws Exception {
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
@@ -27,7 +27,7 @@ public class StreamTriangleCountExample {
 		//   - 100 vertices
 		//   - 954 edges
 		//   - 884 triangles
-		DataStream<Edge<Long, NullValue>> edges = env.readTextFile("random_graph.txt")
+		DataStream<Edge<Long, NullValue>> edges = env.readTextFile("big_random_graph.txt")
 				.flatMap(new FlatMapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public void flatMap(String s, Collector<Edge<Long, NullValue>> out) throws Exception {
@@ -40,7 +40,7 @@ public class StreamTriangleCountExample {
 					}
 				});
 
-		final int instanceSize = 5000;
+		final int instanceSize = 95000 / env.getParallelism();
 		final int totalSize = instanceSize * env.getParallelism();
 
 		DataStream<TriangleEstimate> results = edges
@@ -89,12 +89,12 @@ public class StreamTriangleCountExample {
 			for (SampleTriangleState state : states) {
 
 				// Flip a coin and with probability 1/i sample a candidate
-				if (Coin.flip(state.i)) {
-					state.srcVertex = edge.getSource();
-					state.trgVertex = edge.getTarget();
+				if (vertices.size() > 2) {
+					if (Coin.flip(state)) {
+						state.srcVertex = edge.getSource();
+						state.trgVertex = edge.getTarget();
 
-					// Randomly sample the third vertex from V \ {src, trg}
-					if (vertices.size() > 2) {
+						// Randomly sample the third vertex from V \ {src, trg}
 						while (true) {
 							state.thirdVertex = vertices.get((int) Math.floor(Math.random() * vertices.size()));
 
@@ -102,10 +102,10 @@ public class StreamTriangleCountExample {
 								break;
 							}
 						}
-					}
 
-					state.srcEdgeFound = false;
-					state.trgEdgeFound = false;
+						state.srcEdgeFound = false;
+						state.trgEdgeFound = false;
+					}
 				}
 
 				// Check if any of the two remaining edges in the candidate has been found
@@ -118,9 +118,6 @@ public class StreamTriangleCountExample {
 						|| (edge.getSource() == state.thirdVertex && edge.getTarget() == state.trgVertex)) {
 					state.trgEdgeFound = true;
 				}
-
-				// Increase i
-				state.i++;
 
 				state.beta = (state.srcEdgeFound && state.trgEdgeFound) ? 1 : 0;
 
@@ -163,8 +160,8 @@ public class StreamTriangleCountExample {
 			}
 
 			int globalBetaSum = 0;
-			for (Map.Entry<Integer, TriangleEstimate> entry : results.entrySet()) {
-				globalBetaSum += entry.getValue().getBeta();
+			for (TriangleEstimate entry : results.values()) {
+				globalBetaSum += entry.getBeta();
 			}
 
 			int result = (int) ((1.0 / (double) sampleSize) * globalBetaSum * maxEdges * (maxVertices - 2));
@@ -197,12 +194,15 @@ public class StreamTriangleCountExample {
 	}
 
 	private static final class Coin {
-		public static boolean flip(int sides) {
-			return (Math.random() * (sides) < 1);
+		public static boolean flip(SampleTriangleState state) {
+			boolean result = (Math.random() * (state.i) < 1);
+			state.i++;
+
+			return result;
 		}
 	}
 
 	public static void main(String[] args) throws Exception {
-		new StreamTriangleCountExample();
+		new StreamTriangleCount();
 	}
 }

@@ -16,17 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example;
+package org.apache.flink.graph.streaming.example.bipartiteness;
 
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.EdgeOnlyStream;
-import org.apache.flink.graph.streaming.example.utils.Candidate;
-import org.apache.flink.graph.streaming.example.utils.SignedVertex;
+import org.apache.flink.graph.streaming.example.bipartiteness.util.Candidate;
+import org.apache.flink.graph.streaming.example.bipartiteness.util.SignedVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
@@ -37,13 +34,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class BatchBipartitenessExample {
+public class StreamedBipartiteness {
 
-	public BatchBipartitenessExample() throws Exception  {
-		ExecutionEnvironment env = ExecutionEnvironment.createLocalEnvironment();
+	public StreamedBipartiteness() throws Exception  {
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
+		env.setParallelism(4);
 
 		// Source: http://grouplens.org/datasets/movielens/
-		DataSet<Edge<Long, NullValue>> edges = env
+		DataStream<Edge<Long, NullValue>> edges = env
 				.readTextFile("movielens_10m_sorted.txt")
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
@@ -56,10 +54,7 @@ public class BatchBipartitenessExample {
 				});
 
 		edges.flatMap(new InitCandidateMapper())
-				.map(new BipartitenessMapper())
-				.setParallelism(1)
-				.maxBy(0)
-				.print();
+				.map(new BipartitenessMapper()).setParallelism(1);
 
 		JobExecutionResult res = env.execute("Sandbox");
 		System.out.println("Result: " + res.getNetRuntime());
@@ -215,6 +210,6 @@ public class BatchBipartitenessExample {
 	}
 
 	public static void main(String[] args) throws Exception {
-		new BatchBipartitenessExample();
+		new StreamedBipartiteness();
 	}
 }

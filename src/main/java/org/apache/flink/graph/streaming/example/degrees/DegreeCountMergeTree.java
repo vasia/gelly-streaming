@@ -16,26 +16,22 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example;
+package org.apache.flink.graph.streaming.example.degrees;
 
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
-import org.apache.flink.graph.streaming.example.utils.Degrees;
+import org.apache.flink.graph.streaming.example.degrees.util.Degrees;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
-import java.util.Comparator;
-import java.util.Map;
-import java.util.TreeMap;
+public class DegreeCountMergeTree {
 
-public class DegreeCountMergeTreeExample {
-
-	public DegreeCountMergeTreeExample() throws Exception {
+	public DegreeCountMergeTree() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
 		// Source: http://grouplens.org/datasets/movielens/
@@ -110,6 +106,6 @@ public class DegreeCountMergeTreeExample {
 	}
 
 	public static void main(String[] args) throws Exception {
-		new DegreeCountMergeTreeExample();
+		new DegreeCountMergeTree();
 	}
 }

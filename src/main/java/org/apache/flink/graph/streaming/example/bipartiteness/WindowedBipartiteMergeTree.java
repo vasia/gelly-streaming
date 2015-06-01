@@ -16,31 +16,28 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example;
+package org.apache.flink.graph.streaming.example.bipartiteness;
 
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
-import org.apache.flink.graph.streaming.example.utils.Candidate;
-import org.apache.flink.graph.streaming.example.utils.SignedVertex;
+import org.apache.flink.graph.streaming.example.bipartiteness.util.Candidate;
+import org.apache.flink.graph.streaming.example.bipartiteness.util.SignedVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-public class WindowedBipartiteMergeTreeExample {
+public class WindowedBipartiteMergeTree {
 
-	public WindowedBipartiteMergeTreeExample() throws Exception  {
+	public WindowedBipartiteMergeTree() throws Exception  {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 		env.setParallelism(4);
 
@@ -215,6 +212,6 @@ public class WindowedBipartiteMergeTreeExample {
 	}
 
 	public static void main(String[] args) throws Exception {
-		new WindowedBipartiteMergeTreeExample();
+		new WindowedBipartiteMergeTree();
 	}
 }

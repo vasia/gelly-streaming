@@ -16,32 +16,26 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example;
+package org.apache.flink.graph.streaming.example.matchings;
 
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
-import org.apache.flink.graph.streaming.example.utils.Degrees;
-import org.apache.flink.graph.streaming.example.utils.MatchingEvent;
+import org.apache.flink.graph.streaming.example.matchings.util.MatchingEvent;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
-import java.util.Comparator;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 
-public class CentralizedWeightedMatchingExample {
+public class CentralizedWeightedMatching {
 
 	public static final long TOP_DEGREES = 11;
 
-	public CentralizedWeightedMatchingExample() throws Exception {
+	public CentralizedWeightedMatching() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
 		// Source: http://grouplens.org/datasets/movielens/
@@ -112,6 +106,6 @@ public class CentralizedWeightedMatchingExample {
 	}
 
 	public static void main(String[] args) throws Exception {
-		new CentralizedWeightedMatchingExample();
+		new CentralizedWeightedMatching();
 	}
 }

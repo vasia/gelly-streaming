@@ -249,7 +249,7 @@ public class EdgeOnlyStream<K, EV> {
 	 */
 	@SuppressWarnings("unchecked")
 	public EdgeOnlyStream<K, EV> union(EdgeOnlyStream<K, EV> graph) {
-		return new EdgeOnlyStream<>(this.edges.merge(graph.getEdges()), this.getContext());
+		return new EdgeOnlyStream<>(this.edges.union(graph.getEdges()), this.getContext());
 	}
 
 	/**

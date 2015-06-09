@@ -1,5 +1,6 @@
 package org.apache.flink.graph.streaming.example.triangles;
 
+import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.common.functions.MapFunction;
@@ -18,7 +19,11 @@ import java.util.HashSet;
 
 public class GellyTriangleCount {
 
-	public GellyTriangleCount() throws Exception {
+	public GellyTriangleCount() throws Exception {	}
+
+	public long run(int vertexCount) throws Exception {
+
+		String graphFile = String.format("graphs/graph_%d.txt", vertexCount);
 
 		ExecutionEnvironment env = ExecutionEnvironment.createLocalEnvironment();
 
@@ -28,7 +33,7 @@ public class GellyTriangleCount {
 
 		// Get it from: http://snap.stanford.edu/data/twitter_combined.txt.gz
 		// The result should be 13082506, according to http://snap.stanford.edu/data/egonets-Twitter.html
-		DataSet<Edge<Long, NullValue>> edges = env.readTextFile("bigger_random_graph.txt")
+		DataSet<Edge<Long, NullValue>> edges = env.readTextFile(graphFile)
 				.flatMap(new FlatMapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public void flatMap(String s, Collector<Edge<Long, NullValue>> out) throws Exception {
@@ -67,7 +72,9 @@ public class GellyTriangleCount {
 				.print();
 
 
-		env.execute("Triangle count");
+		env.getConfig().disableSysoutLogging();
+		JobExecutionResult result = env.execute("Triangle count");
+		return result.getNetRuntime();
 	}
 
 	private static final class EdgeCandidateReducer
@@ -119,6 +126,7 @@ public class GellyTriangleCount {
 	}
 
 	public static void main(String[] args) throws Exception {
-		new GellyTriangleCount();
+		GellyTriangleCount g = new GellyTriangleCount();
+		g.run(1000);
 	}
 }

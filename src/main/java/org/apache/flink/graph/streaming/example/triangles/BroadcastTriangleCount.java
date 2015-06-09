@@ -2,7 +2,6 @@ package org.apache.flink.graph.streaming.example.triangles;
 
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
@@ -20,18 +19,20 @@ import java.util.Map;
 
 public class BroadcastTriangleCount {
 
-	public static final int VERTEX_COUNT = 3000;
-	public final String graphFile = "big_random_graph.txt";
+	public static int VERTEX_COUNT = 0;
+	public static long LAST_RESULT = 0;
 
-	public BroadcastTriangleCount() throws Exception {
+	public BroadcastTriangleCount() throws Exception { }
 
+	public Tuple2<Long, Long> run(String filePath, int vertices) throws Exception {
+		VERTEX_COUNT = vertices;
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
 		// A random graph I generated, details:
 		//   - 100 vertices
 		//   - 954 edges
 		//   - 884 triangles
-		DataStream<Edge<Long, NullValue>> edges = env.readTextFile(graphFile)
+		DataStream<Edge<Long, NullValue>> edges = env.readTextFile(filePath)
 				.flatMap(new FlatMapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public void flatMap(String s, Collector<Edge<Long, NullValue>> out) throws Exception {
@@ -45,7 +46,7 @@ public class BroadcastTriangleCount {
 				});
 
 		final int p = env.getParallelism();
-		final int totalSize = 45000;
+		final int totalSize = 100000;
 		final int instanceSize = totalSize / p;
 
 		DataStream<TriangleEstimate> results = edges
@@ -53,23 +54,24 @@ public class BroadcastTriangleCount {
 				.flatMap(new TriangleSampler(instanceSize));
 
 		// Extract deltaBeta and sequence number
-		results.flatMap(new TriangleSummer(totalSize)).setParallelism(1)
-				.print().setParallelism(1);
+		results.flatMap(new TriangleSummer(totalSize))
+				.setParallelism(1);
+				//.print();
 
 		// The output format is <edge count, triangle estimate>
+		env.getConfig().disableSysoutLogging();
 		JobExecutionResult res = env.execute("Streaming Triangle Count (Estimate)");
-		System.out.println("Runtime: " + res.getNetRuntime());
+
+		return new Tuple2<>(res.getNetRuntime(), LAST_RESULT);
 	}
 
 	private static final class TriangleSampler extends RichFlatMapFunction<Edge<Long, NullValue>, TriangleEstimate> {
 		private List<SampleTriangleState> states;
-		// private List<Long> vertices;
 		private int edgeCount;
 		private int previousResult;
 
 		public TriangleSampler(int size) {
 			this.states = new ArrayList<>();
-			// this.vertices = new ArrayList<>();
 			this.edgeCount = 0;
 			this.previousResult = 0;
 
@@ -83,16 +85,6 @@ public class BroadcastTriangleCount {
 			// Update edge count
 			edgeCount++;
 
-			// Update vertices
-			/*
-			if (!vertices.contains(edge.getSource())) {
-				vertices.add(edge.getSource());
-			}
-			if (!vertices.contains(edge.getTarget())) {
-				vertices.add(edge.getTarget());
-			}
-			*/
-
 			int localBetaSum = 0;
 
 			// Process the edge for all instances
@@ -105,7 +97,6 @@ public class BroadcastTriangleCount {
 
 					// Randomly sample the third vertex from V \ {src, trg}
 					while (true) {
-						// state.thirdVertex = vertices.get((int) Math.floor(Math.random() * vertices.size()));
 						state.thirdVertex = (int) Math.floor(Math.random() * VERTEX_COUNT);
 
 						if (state.thirdVertex != state.srcVertex && state.thirdVertex != state.trgVertex) {
@@ -183,6 +174,7 @@ public class BroadcastTriangleCount {
 			int result = (int) ((1.0 / (double) sampleSize) * globalBetaSum * maxEdges * (maxVertices - 2));
 			if (result != previousResult) {
 				previousResult = result;
+				LAST_RESULT = result;
 				out.collect(new Tuple2<>(maxEdges, result));
 			}
 
@@ -219,9 +211,5 @@ public class BroadcastTriangleCount {
 
 			return result;
 		}
-	}
-
-	public static void main(String[] args) throws Exception {
-		new BroadcastTriangleCount();
 	}
 }

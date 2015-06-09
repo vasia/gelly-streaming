@@ -33,8 +33,6 @@ import java.util.Set;
 
 public class CentralizedWeightedMatching {
 
-	public static final long TOP_DEGREES = 11;
-
 	public CentralizedWeightedMatching() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 

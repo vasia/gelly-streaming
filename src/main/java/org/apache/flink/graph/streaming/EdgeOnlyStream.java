@@ -25,6 +25,7 @@ import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
@@ -37,9 +38,12 @@ import org.apache.flink.streaming.api.windowing.helper.Count;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /**
@@ -533,6 +537,87 @@ public class EdgeOnlyStream<K, EV> {
 		@Override
 		public T map(Tuple2<Integer, T> input) throws Exception {
 			return input.f1;
+		}
+	}
+
+	public <T> DataStream<T> incidenceSample(FlatMapFunction<Edge<K, EV>, T> sampleMapper,
+			int sampleCount, int parallelism) {
+		// TODO: add edge --> sample state mapper
+		return edges
+				.flatMap(new IncidenceSamplePartitioner<K, EV>(sampleCount, parallelism))
+				.setParallelism(1)
+				.groupBy(1)
+				.flatMap(new IncidenceSampleMapper<>(sampleMapper));
+	}
+
+	private static final class IncidenceSamplePartitioner<K, EV> implements FlatMapFunction<Edge<K, EV>,
+			Tuple5<Edge<K, EV>, Integer, Integer, Integer, Boolean>> {
+		private int sampleCount, parallelism, edgeCount;
+		private final List<Random> coins;
+		private final List<Edge<K, EV>> sampledEdges;
+
+		public IncidenceSamplePartitioner(int sampleCount, int parallelism) {
+			this.sampleCount = sampleCount;
+			this.parallelism = parallelism;
+			this.edgeCount = 0;
+
+			this.coins = new ArrayList<>();
+			this.sampledEdges = new ArrayList<>();
+
+			Random r = new Random();
+			for (int i = 0; i < sampleCount * parallelism; ++i) {
+				coins.add(new Random(r.nextInt()));
+				sampledEdges.add(null);
+			}
+		}
+
+		@Override
+		public void flatMap(Edge<K, EV> edge, Collector<Tuple5<Edge<K, EV>,
+				Integer, Integer, Integer, Boolean>> out) throws Exception {
+			edgeCount++;
+
+			// Flip a coin for all instances
+			for (int i = 0; i < sampleCount * parallelism; ++i) {
+				boolean reSample = coinFlip(this.edgeCount, coins.get(i));
+				int subtask = i % parallelism;
+				int instance = i / parallelism;
+
+				if (reSample) {
+					out.collect(new Tuple5<>(edge, subtask, instance, edgeCount, true));
+					sampledEdges.set(i, edge);
+
+				} else if (sampledEdges.get(i) != null) {
+					// Check if the edge is incident to the sampled one
+					Edge<K, EV> e = sampledEdges.get(i);
+					boolean incidence = e.getSource().equals(edge.getSource())
+							|| e.getSource().equals(edge.getTarget())
+							|| e.getTarget().equals(edge.getSource())
+							|| e.getTarget().equals(edge.getTarget());
+
+					if (incidence) {
+						out.collect(new Tuple5<>(edge, subtask, instance, edgeCount, false));
+					}
+				}
+			}
+		}
+
+		public boolean coinFlip(int size, Random rnd) {
+			return rnd.nextDouble() * size <= 1.0;
+		}
+	}
+
+	private static final class IncidenceSampleMapper<K, EV, T> implements FlatMapFunction<Tuple5<Edge<K, EV>,
+			Integer, Integer, Integer, Boolean>, T> {
+		private final FlatMapFunction<Edge<K, EV>, T> sampleMapper;
+
+		public IncidenceSampleMapper(FlatMapFunction<Edge<K, EV>, T> sampleMapper) {
+			this.sampleMapper = sampleMapper;
+		}
+
+		@Override
+		public void flatMap(Tuple5<Edge<K, EV>, Integer, Integer, Integer, Boolean> sample,
+				Collector<T> out) throws Exception {
+
 		}
 	}
 

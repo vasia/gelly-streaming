@@ -36,13 +36,16 @@ import java.util.Map;
 
 public class StreamedBipartiteness {
 
-	public StreamedBipartiteness() throws Exception  {
+	public StreamedBipartiteness() {
+
+	}
+
+	public long run(String filePath) throws Exception  {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
-		env.setParallelism(4);
 
 		// Source: http://grouplens.org/datasets/movielens/
 		DataStream<Edge<Long, NullValue>> edges = env
-				.readTextFile("movielens_10m_sorted.txt")
+				.readTextFile(filePath)
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
@@ -56,8 +59,9 @@ public class StreamedBipartiteness {
 		edges.flatMap(new InitCandidateMapper())
 				.map(new BipartitenessMapper()).setParallelism(1);
 
+		env.getConfig().disableSysoutLogging();
 		JobExecutionResult res = env.execute("Sandbox");
-		System.out.println("Result: " + res.getNetRuntime());
+		return res.getNetRuntime();
 	}
 
 	private static final class BipartitenessMapper implements MapFunction<Candidate, Candidate> {
@@ -207,9 +211,5 @@ public class StreamedBipartiteness {
 
 			out.collect(candidate);
 		}
-	}
-
-	public static void main(String[] args) throws Exception {
-		new StreamedBipartiteness();
 	}
 }

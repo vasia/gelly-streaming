@@ -37,13 +37,15 @@ import java.util.Map;
 
 public class WindowedBipartiteMergeTree {
 
-	public WindowedBipartiteMergeTree() throws Exception  {
+	public WindowedBipartiteMergeTree() { }
+
+	public long run(String filePath, int windowSize) throws Exception  {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 		env.setParallelism(4);
 
 		// Source: http://grouplens.org/datasets/movielens/
 		DataStream<Edge<Long, NullValue>> edges = env
-				.readTextFile("movielens_1m_sorted.txt")
+				.readTextFile(filePath)
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
@@ -55,11 +57,12 @@ public class WindowedBipartiteMergeTree {
 				});
 
 		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edges, env);
-		graph.mergeTree(new InitCandidateMapper(), new BipartitenessMapper(), 10000)
-				.print();
+		graph.mergeTree(new InitCandidateMapper(), new BipartitenessMapper(), windowSize)
+				;//.print();
 
+		env.getConfig().disableSysoutLogging();
 		JobExecutionResult res = env.execute("Distributed Merge Tree Sandbox");
-		System.out.println("Result: " + res.getNetRuntime());
+		return res.getNetRuntime();
 	}
 
 	private static final class BipartitenessMapper implements MapFunction<Candidate, Candidate> {
@@ -209,9 +212,5 @@ public class WindowedBipartiteMergeTree {
 
 			out.collect(candidate);
 		}
-	}
-
-	public static void main(String[] args) throws Exception {
-		new WindowedBipartiteMergeTree();
 	}
 }

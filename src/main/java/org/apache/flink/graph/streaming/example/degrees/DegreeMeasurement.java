@@ -1,13 +1,9 @@
 package org.apache.flink.graph.streaming.example.degrees;
 
-import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.streaming.EdgeOnlyStream;
-import org.apache.flink.graph.streaming.example.bipartiteness.StreamedBipartiteness;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.WindowMapFunction;
@@ -23,15 +19,33 @@ import java.util.Map;
 
 public class DegreeMeasurement {
 
-	public static String inFile = "d:\\_work\\gelly-streaming\\movielens_20m_sorted.txt";
-	public static String outFile = "d:\\_work\\gelly-streaming\\movielens_tmp_sorted.txt";
+	public static String srcFile;
+	public static String tmpFile = "tmp_graph.txt";
+
+	private static void createData(int size) throws Exception {
+		// Create new data set;
+		FileWriter fw = new FileWriter(tmpFile, false);
+
+		try (BufferedReader br = new BufferedReader(new FileReader(srcFile))) {
+			String line;
+			int count = 0;
+			while (count < size && (line = br.readLine()) != null) {
+				// process the line.
+				fw.write(line);
+				fw.write("\r\n");
+				count++;
+			}
+		}
+
+		fw.close();
+	}
 
 	public static void measureControl(String resultFile, int size) throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 		env.getConfig().disableSysoutLogging();
 
 		DataStream<Edge<Long, NullValue>> edgeStream = env
-				.readTextFile(outFile)
+				.readTextFile(tmpFile)
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
@@ -57,14 +71,14 @@ public class DegreeMeasurement {
 		res.close();
 	}
 
-	public static void measureDegrees(String resultFile, int size) throws Exception {
+	public static void measureParallel(String resultFile, int size) throws Exception {
 
 		// Create environment
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 		env.getConfig().disableSysoutLogging();
 
 		DataStream<Edge<Long, NullValue>> edgeStream = env
-				.readTextFile(outFile)
+				.readTextFile(tmpFile)
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
@@ -92,7 +106,7 @@ public class DegreeMeasurement {
 		env.setParallelism(1);
 
 		DataStream<Edge<Long, NullValue>> edgeStream = env
-				.readTextFile(outFile)
+				.readTextFile(tmpFile)
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
@@ -119,7 +133,7 @@ public class DegreeMeasurement {
 		env.getConfig().disableSysoutLogging();
 
 		DataStream<Edge<Long, NullValue>> edgeStream = env
-				.readTextFile(outFile)
+				.readTextFile(tmpFile)
 				.map(new MapFunction<String, Edge<Long, NullValue>>() {
 					@Override
 					public Edge<Long, NullValue> map(String s) throws Exception {
@@ -144,40 +158,6 @@ public class DegreeMeasurement {
 		FileWriter res = new FileWriter(resultFile, true);
 		res.append(String.format("(%d, %d)\n", size, timeResult));
 		res.close();
-	}
-
-	public static void main(String[] args) throws Exception {
-		String controlResult = "d:\\_work\\gelly-streaming\\degree_control_results.csv";
-		String degreeResult = "d:\\_work\\gelly-streaming\\degree_results.csv";
-		String windowResult = "d:\\_work\\gelly-streaming\\degree_window_results.csv";
-		String serialResult = "d:\\_work\\gelly-streaming\\degree_serial_results.csv";
-
-		// Measure different sizes
-		for (int size = 100000; size <= 20000000; size += 100000) {
-			System.out.println("Processing " + size);
-
-			// Create new data set;
-			FileWriter fw = new FileWriter(outFile, false);
-
-			try (BufferedReader br = new BufferedReader(new FileReader(inFile))) {
-				String line;
-				int count = 0;
-				while (count < size && (line = br.readLine()) != null) {
-					// process the line.
-					fw.write(line);
-					fw.write("\r\n");
-					count++;
-				}
-			}
-
-			fw.close();
-
-			measureControl(controlResult, size);
-			measureDegrees(degreeResult, size);
-			measureWindows(windowResult, size);
-			measureSerial(serialResult, size);
-		}
-
 	}
 
 	private static final class DegreeTypeSeparator <K, EV>
@@ -220,5 +200,36 @@ public class DegreeMeasurement {
 			localDegrees.put(key, localDegrees.get(key) + degree.getValue());
 			return new Vertex<>(key, localDegrees.get(key));
 		}
+	}
+
+	public static void main(String[] args) throws Exception {
+
+		if (args.length < 4) {
+			System.out.println("Arguments: <srcFile> <start size> <end size> <increment>");
+			return;
+		}
+
+		srcFile = args[0];
+		int startSize = Integer.parseInt(args[1]);
+		int endSize = Integer.parseInt(args[2]);
+		int increment = Integer.parseInt(args[3]);
+
+		String controlResult = "degree_control_results.csv";
+		String parallelResult = "degree_parallel_results.csv";
+		String windowResult = "degree_window_results.csv";
+		String serialResult = "degree_serial_results.csv";
+
+		// Measure different sizes
+		for (int size = startSize; size <= endSize; size += increment) {
+			System.out.println("Processing " + size);
+
+			createData(size);
+
+			measureControl(controlResult, size);
+			measureParallel(parallelResult, size);
+			measureSerial(serialResult, size);
+			// measureWindows(windowResult, size);
+		}
+
 	}
 }

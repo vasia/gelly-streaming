@@ -83,7 +83,6 @@
                         </goals>
                     </execution>
 
-                    <!-- Example Execution -->
                     <execution>
                         <id>BipartiteMeasurement</id>
                         <phase>package</phase>
@@ -97,6 +96,42 @@
                                 <manifestEntries>
                                     <program-class>
                                         org.apache.flink.graph.streaming.example.bipartiteness.BipartiteMeasurement
+                                    </program-class>
+                                </manifestEntries>
+                            </archive>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>TriangleMeasurement</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>TriangleMeasurements</classifier>
+
+                            <archive>
+                                <manifestEntries>
+                                    <program-class>
+                                        org.apache.flink.graph.streaming.example.triangles.TriangleMeasurements
+                                    </program-class>
+                                </manifestEntries>
+                            </archive>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>DegreeMeasurement</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jar</goal>
+                        </goals>
+                        <configuration>
+                            <classifier>DegreeMeasurement</classifier>
+
+                            <archive>
+                                <manifestEntries>
+                                    <program-class>
+                                        org.apache.flink.graph.streaming.example.degrees.DegreeMeasurement
                                     </program-class>
                                 </manifestEntries>
                             </archive>

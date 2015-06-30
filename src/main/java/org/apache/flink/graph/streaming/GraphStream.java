@@ -48,14 +48,14 @@ import java.util.Set;
 
 /**
  *
- * Represents a streamed graph where the stream consisting solely of {@link org.apache.flink.graph.Edge edges}
+ * Represents a streamed graph where the stream consists solely of {@link org.apache.flink.graph.Edge edges}
  *
  * @see org.apache.flink.graph.Edge
  *
  * @param <K> the key type for edge and vertex identifiers.
  * @param <EV> the value type for edges.
  */
-public class EdgeOnlyStream<K, EV> {
+public class GraphStream<K, EV> {
 
 	private final StreamExecutionEnvironment context;
 	private final DataStream<Edge<K, EV>> edges;
@@ -66,7 +66,7 @@ public class EdgeOnlyStream<K, EV> {
 	 * @param edges a DataStream of edges.
 	 * @param context the flink execution environment.
 	 */
-	public EdgeOnlyStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context) {
+	public GraphStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context) {
 		this.edges = edges;
 		this.context = context;
 	}
@@ -124,11 +124,11 @@ public class EdgeOnlyStream<K, EV> {
 	 * @param mapper the map function to apply.
 	 * @return a new graph stream.
 	 */
-	public <NV> EdgeOnlyStream<K, NV> mapEdges(final MapFunction<Edge<K, EV>, NV> mapper) {
+	public <NV> GraphStream<K, NV> mapEdges(final MapFunction<Edge<K, EV>, NV> mapper) {
 		TypeInformation<K> keyType = ((TupleTypeInfo<?>) edges.getType()).getTypeAt(0);
 		DataStream<Edge<K, NV>> mappedEdges = edges.map(new ApplyMapperToEdgeWithType<>(mapper,
 				keyType));
-		return new EdgeOnlyStream<>(mappedEdges, this.context);
+		return new GraphStream<>(mappedEdges, this.context);
 	}
 
 	private static final class ApplyMapperToEdgeWithType<K, EV, NV>
@@ -163,11 +163,11 @@ public class EdgeOnlyStream<K, EV> {
 	 * @param filter the filter function to apply.
 	 * @return the filtered graph stream.
 	 */
-	public EdgeOnlyStream<K, EV> filterVertices(FilterFunction<Vertex<K, NullValue>> filter) {
+	public GraphStream<K, EV> filterVertices(FilterFunction<Vertex<K, NullValue>> filter) {
 		DataStream<Edge<K, EV>> remainingEdges = this.edges
 				.filter(new ApplyVertexFilterToEdges<K, EV>(filter));
 
-		return new EdgeOnlyStream<>(remainingEdges, this.context);
+		return new GraphStream<>(remainingEdges, this.context);
 	}
 
 	private static final class ApplyVertexFilterToEdges<K, EV>
@@ -195,9 +195,9 @@ public class EdgeOnlyStream<K, EV> {
 	 * @param filter the filter function to apply.
 	 * @return the filtered graph stream.
 	 */
-	public EdgeOnlyStream<K, EV> filterEdges(FilterFunction<Edge<K, EV>> filter) {
+	public GraphStream<K, EV> filterEdges(FilterFunction<Edge<K, EV>> filter) {
 		DataStream<Edge<K, EV>> remainingEdges = this.edges.filter(filter);
-		return new EdgeOnlyStream<>(remainingEdges, this.context);
+		return new GraphStream<>(remainingEdges, this.context);
 	}
 
 	/**
@@ -205,12 +205,12 @@ public class EdgeOnlyStream<K, EV> {
 	 *
 	 * @return a graph stream with no duplicate edges
 	 */
-	public EdgeOnlyStream<K, EV> distinct() {
+	public GraphStream<K, EV> distinct() {
 		DataStream<Edge<K, EV>> edgeStream = this.edges
 				.groupBy(0)
 				.flatMap(new DistinctEdgeMapper<K, EV>());
 
-		return new EdgeOnlyStream<>(edgeStream, this.getContext());
+		return new GraphStream<>(edgeStream, this.getContext());
 	}
 
 	private static final class DistinctEdgeMapper<K, EV> implements FlatMapFunction<Edge<K, EV>, Edge<K, EV>> {
@@ -232,8 +232,8 @@ public class EdgeOnlyStream<K, EV> {
 	/**
 	 * @return a graph stream with the edge directions reversed
 	 */
-	public EdgeOnlyStream<K, EV> reverse() {
-		return new EdgeOnlyStream<>(this.edges.map(new ReverseEdgeMapper<K, EV>()), this.getContext());
+	public GraphStream<K, EV> reverse() {
+		return new GraphStream<>(this.edges.map(new ReverseEdgeMapper<K, EV>()), this.getContext());
 	}
 
 	private static final class ReverseEdgeMapper<K, EV> implements MapFunction<Edge<K, EV>, Edge<K, EV>> {
@@ -248,14 +248,14 @@ public class EdgeOnlyStream<K, EV> {
 	 * @return a streamed graph where the two edge streams are merged
 	 */
 	@SuppressWarnings("unchecked")
-	public EdgeOnlyStream<K, EV> union(EdgeOnlyStream<K, EV> graph) {
-		return new EdgeOnlyStream<>(this.edges.union(graph.getEdges()), this.getContext());
+	public GraphStream<K, EV> union(GraphStream<K, EV> graph) {
+		return new GraphStream<>(this.edges.union(graph.getEdges()), this.getContext());
 	}
 
 	/**
 	 * @return a graph stream where edges are undirected
 	 */
-	public EdgeOnlyStream<K, EV> undirected() {
+	public GraphStream<K, EV> undirected() {
 		return this.union(this.reverse());
 	}
 
@@ -537,87 +537,6 @@ public class EdgeOnlyStream<K, EV> {
 		@Override
 		public T map(Tuple2<Integer, T> input) throws Exception {
 			return input.f1;
-		}
-	}
-
-	public <T> DataStream<T> incidenceSample(FlatMapFunction<Edge<K, EV>, T> sampleMapper,
-			int sampleCount, int parallelism) {
-		// TODO: add edge --> sample state mapper
-		return edges
-				.flatMap(new IncidenceSamplePartitioner<K, EV>(sampleCount, parallelism))
-				.setParallelism(1)
-				.groupBy(1)
-				.flatMap(new IncidenceSampleMapper<>(sampleMapper));
-	}
-
-	private static final class IncidenceSamplePartitioner<K, EV> implements FlatMapFunction<Edge<K, EV>,
-			Tuple5<Edge<K, EV>, Integer, Integer, Integer, Boolean>> {
-		private int sampleCount, parallelism, edgeCount;
-		private final List<Random> coins;
-		private final List<Edge<K, EV>> sampledEdges;
-
-		public IncidenceSamplePartitioner(int sampleCount, int parallelism) {
-			this.sampleCount = sampleCount;
-			this.parallelism = parallelism;
-			this.edgeCount = 0;
-
-			this.coins = new ArrayList<>();
-			this.sampledEdges = new ArrayList<>();
-
-			Random r = new Random();
-			for (int i = 0; i < sampleCount * parallelism; ++i) {
-				coins.add(new Random(r.nextInt()));
-				sampledEdges.add(null);
-			}
-		}
-
-		@Override
-		public void flatMap(Edge<K, EV> edge, Collector<Tuple5<Edge<K, EV>,
-				Integer, Integer, Integer, Boolean>> out) throws Exception {
-			edgeCount++;
-
-			// Flip a coin for all instances
-			for (int i = 0; i < sampleCount * parallelism; ++i) {
-				boolean reSample = coinFlip(this.edgeCount, coins.get(i));
-				int subtask = i % parallelism;
-				int instance = i / parallelism;
-
-				if (reSample) {
-					out.collect(new Tuple5<>(edge, subtask, instance, edgeCount, true));
-					sampledEdges.set(i, edge);
-
-				} else if (sampledEdges.get(i) != null) {
-					// Check if the edge is incident to the sampled one
-					Edge<K, EV> e = sampledEdges.get(i);
-					boolean incidence = e.getSource().equals(edge.getSource())
-							|| e.getSource().equals(edge.getTarget())
-							|| e.getTarget().equals(edge.getSource())
-							|| e.getTarget().equals(edge.getTarget());
-
-					if (incidence) {
-						out.collect(new Tuple5<>(edge, subtask, instance, edgeCount, false));
-					}
-				}
-			}
-		}
-
-		public boolean coinFlip(int size, Random rnd) {
-			return rnd.nextDouble() * size <= 1.0;
-		}
-	}
-
-	private static final class IncidenceSampleMapper<K, EV, T> implements FlatMapFunction<Tuple5<Edge<K, EV>,
-			Integer, Integer, Integer, Boolean>, T> {
-		private final FlatMapFunction<Edge<K, EV>, T> sampleMapper;
-
-		public IncidenceSampleMapper(FlatMapFunction<Edge<K, EV>, T> sampleMapper) {
-			this.sampleMapper = sampleMapper;
-		}
-
-		@Override
-		public void flatMap(Tuple5<Edge<K, EV>, Integer, Integer, Integer, Boolean> sample,
-				Collector<T> out) throws Exception {
-
 		}
 	}
 

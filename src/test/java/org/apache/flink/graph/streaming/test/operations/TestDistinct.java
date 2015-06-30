@@ -20,7 +20,7 @@ package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.EdgeOnlyStream;
+import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
@@ -67,8 +67,8 @@ public class TestDistinct extends MultipleProgramsTestBase {
 		List<Edge<Long, Long>> edges = GraphStreamTestUtils.getLongLongEdges();
 		edges.addAll(GraphStreamTestUtils.getLongLongEdges());
 
-		EdgeOnlyStream<Long, Long> graph =
-				new EdgeOnlyStream<>(env.fromCollection(edges), env);
+		GraphStream<Long, Long> graph =
+				new GraphStream<>(env.fromCollection(edges), env);
 
 		graph.distinct().getEdges()
 				.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);

@@ -3,7 +3,7 @@ package org.apache.flink.graph.streaming.example.degrees;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Vertex;
-import org.apache.flink.graph.streaming.EdgeOnlyStream;
+import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.WindowMapFunction;
@@ -56,7 +56,7 @@ public class DegreeMeasurement {
 					}
 				});
 
-		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edgeStream, env);
+		GraphStream<Long, NullValue> graph = new GraphStream<>(edgeStream, env);
 		graph.mapEdges(new MapFunction<Edge<Long,NullValue>, Edge<Long, NullValue>>() {
 			@Override
 			public Edge<Long, NullValue> map(Edge<Long, NullValue> edge) throws Exception {
@@ -89,7 +89,7 @@ public class DegreeMeasurement {
 					}
 				});
 
-		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edgeStream, env);
+		GraphStream<Long, NullValue> graph = new GraphStream<>(edgeStream, env);
 		graph.getDegrees();
 		long timeResult = env.execute().getNetRuntime();
 
@@ -117,7 +117,7 @@ public class DegreeMeasurement {
 					}
 				});
 
-		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edgeStream, env);
+		GraphStream<Long, NullValue> graph = new GraphStream<>(edgeStream, env);
 		graph.getDegrees();
 		long timeResult = env.execute().getNetRuntime();
 
@@ -144,7 +144,7 @@ public class DegreeMeasurement {
 					}
 				});
 
-		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edgeStream, env);
+		GraphStream<Long, NullValue> graph = new GraphStream<>(edgeStream, env);
 
 		graph.getEdges()
 				.window(Count.of(10000))

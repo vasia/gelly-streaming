@@ -21,7 +21,7 @@ package org.apache.flink.graph.streaming.test.operations;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.EdgeOnlyStream;
+import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
@@ -63,7 +63,7 @@ public class TestFilterEdges extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph = graph.filterEdges(new LowEdgeValueFilter());
 
@@ -91,7 +91,7 @@ public class TestFilterEdges extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph = graph.filterEdges(new EmptyFilter());
 
@@ -121,7 +121,7 @@ public class TestFilterEdges extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeOnlyStream<Long, Long> graph = new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph = graph.filterEdges(new DiscardFilter());
 

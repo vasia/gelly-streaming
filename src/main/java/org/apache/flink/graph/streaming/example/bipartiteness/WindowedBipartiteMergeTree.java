@@ -22,7 +22,7 @@ import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.EdgeOnlyStream;
+import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.example.bipartiteness.util.Candidate;
 import org.apache.flink.graph.streaming.example.bipartiteness.util.SignedVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -56,7 +56,7 @@ public class WindowedBipartiteMergeTree {
 					}
 				});
 
-		EdgeOnlyStream<Long, NullValue> graph = new EdgeOnlyStream<>(edges, env);
+		GraphStream<Long, NullValue> graph = new GraphStream<>(edges, env);
 		graph.mergeTree(new InitCandidateMapper(), new BipartitenessMapper(), windowSize)
 				;//.print();
 

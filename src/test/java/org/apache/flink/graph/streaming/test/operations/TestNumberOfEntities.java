@@ -21,7 +21,7 @@ package org.apache.flink.graph.streaming.test.operations;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.core.fs.FileSystem;
-import org.apache.flink.graph.streaming.EdgeOnlyStream;
+import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
@@ -63,8 +63,8 @@ public class TestNumberOfEntities extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeOnlyStream<Long, Long> graph =
-				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		GraphStream<Long, Long> graph =
+				new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph.numberOfVertices().map(new MapFunction<Long, Tuple1<Long>>() {
 			@Override
@@ -88,8 +88,8 @@ public class TestNumberOfEntities extends MultipleProgramsTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		EdgeOnlyStream<Long, Long> graph =
-				new EdgeOnlyStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		GraphStream<Long, Long> graph =
+				new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph.numberOfEdges().map(new MapFunction<Long, Tuple1<Long>>() {
 			@Override

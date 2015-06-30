@@ -6,7 +6,7 @@ A prototype API for single-pass graph streaming on Apache Flink
 ##Methods
 
 The main abstraction is a graph stream, which is currently represented as an edge-only stream.
-The following methods are currently supported on EdgeOnlyStream:
+The following methods are currently supported on GraphStream:
 
 ###Properties and Metrics
 

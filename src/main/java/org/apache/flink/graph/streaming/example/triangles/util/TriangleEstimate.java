@@ -18,19 +18,16 @@
 
 package org.apache.flink.graph.streaming.example.triangles.util;
 
-import org.apache.flink.api.java.tuple.Tuple4;
-import org.apache.flink.graph.Edge;
-import org.apache.flink.types.NullValue;
+import org.apache.flink.api.java.tuple.Tuple3;
 
-public class TriangleEstimate extends Tuple4<Integer, Integer, Integer, Integer> {
+public class TriangleEstimate extends Tuple3<Integer, Integer, Integer> {
 
 	public TriangleEstimate() {}
 
-	public TriangleEstimate(int source, int edges, int vertices, int beta) throws Exception {
+	public TriangleEstimate(int source, int edges, int beta) throws Exception {
 		this.f0 = source;
 		this.f1 = edges;
-		this.f2 = vertices;
-		this.f3 = beta;
+		this.f2 = beta;
 	}
 
 	public int getSource() {
@@ -41,11 +38,7 @@ public class TriangleEstimate extends Tuple4<Integer, Integer, Integer, Integer>
 		return this.f1;
 	}
 
-	public int getVertexCount() {
-		return this.f2;
-	}
-
 	public int getBeta() {
-		return this.f3;
+		return this.f2;
 	}
 }

@@ -35,6 +35,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.RichWindowMapFunction;
 import org.apache.flink.streaming.api.windowing.helper.Count;
+import org.apache.flink.streaming.api.windowing.helper.WindowingHelper;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
@@ -437,12 +438,13 @@ public class GraphStream<K, EV> {
 	 *
 	 * @param initMapper the map function that transforms edges into the intermediate data type
 	 * @param treeMapper the map function that performs the aggregation between the data elements
-	 * @param windowSize the size of the window to use before the first level
+	 * @param window the window to use before the first level
 	 * @param <T> the inner data type
+	 * @param <U> the window data type
 	 * @return an aggregated stream of the given data type
 	 */
-	public <T> DataStream<T> mergeTree(FlatMapFunction<Edge<K, EV>, T> initMapper,
-			MapFunction<T, T> treeMapper, int windowSize) {
+	public <T, U> DataStream<T> mergeTree(FlatMapFunction<Edge<K, EV>, T> initMapper,
+			MapFunction<T, T> treeMapper, WindowingHelper<U> window) {
 		int dop = this.context.getParallelism();
 		int levels = (int) (Math.log(dop) / Math.log(2));
 
@@ -452,7 +454,7 @@ public class GraphStream<K, EV> {
 
 		for (int i = 0; i < levels; ++i) {
 			chainedStream = chainedStream
-					.window(Count.of(windowSize / (int) Math.pow(10, i)))
+					.window(window)
 					.mapWindow(new MergeTreeWindowMapper<>(treeMapper))
 					.flatten();
 
@@ -539,5 +541,4 @@ public class GraphStream<K, EV> {
 			return input.f1;
 		}
 	}
-
 }

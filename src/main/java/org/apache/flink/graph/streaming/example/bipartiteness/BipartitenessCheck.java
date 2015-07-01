@@ -19,13 +19,23 @@
 package org.apache.flink.graph.streaming.example.bipartiteness;
 
 import org.apache.flink.api.common.JobExecutionResult;
+import org.apache.flink.api.common.ProgramDescription;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.java.DataSet;
+import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.Graph;
+import org.apache.flink.graph.Vertex;
+import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.example.bipartiteness.util.Candidate;
 import org.apache.flink.graph.streaming.example.bipartiteness.util.SignedVertex;
+import org.apache.flink.graph.utils.Tuple3ToEdgeMap;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.windowing.helper.Count;
+import org.apache.flink.streaming.api.windowing.helper.Time;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
@@ -33,36 +43,45 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-public class StreamedBipartiteness {
+/**
+ * The bipartiteness check example tests whether an input graph is bipartite
+ * or not. A bipartite graph's vertices can be separated into two disjoint
+ * groups, such as no two nodes inside the same group is connected by an edge.
+ * The example uses the merge-tree abstraction of our graph streaming API.
+ */
+public class BipartitenessCheck implements ProgramDescription {
 
-	public StreamedBipartiteness() {
+	public static void main(String[] args) throws Exception {
 
+		// Set up the environment
+		if(!parseParameters(args)) {
+			return;
+		}
+
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+		DataStream<Edge<Long, NullValue>> edges = getEdgesDataSet(env);
+
+		// Process bipartiteness
+		GraphStream<Long, NullValue> graph = new GraphStream<>(edges, env);
+		DataStream<Candidate> bipartition = graph.mergeTree(new InitCandidateMapper(),
+				new BipartitenessMapper(), Time.of(1, TimeUnit.SECONDS));
+
+		// Emit the results
+		if (fileOutput) {
+			bipartition.writeAsCsv(outputPath);
+		} else {
+			bipartition.print();
+		}
+
+		env.execute("Bipartiteness Check");
 	}
 
-	public long run(String filePath) throws Exception  {
-		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
+	// *************************************************************************
+	//     BIPARTITENESS FUNCTIONS
+	// *************************************************************************
 
-		// Source: http://grouplens.org/datasets/movielens/
-		DataStream<Edge<Long, NullValue>> edges = env
-				.readTextFile(filePath)
-				.map(new MapFunction<String, Edge<Long, NullValue>>() {
-					@Override
-					public Edge<Long, NullValue> map(String s) throws Exception {
-						String[] args = s.split(",");
-						long src = Long.parseLong(args[0]);
-						long trg = Long.parseLong(args[1]) + 1000000;
-						return new Edge<>(src, trg, NullValue.getInstance());
-					}
-				});
-
-		edges.flatMap(new InitCandidateMapper())
-				.map(new BipartitenessMapper()).setParallelism(1);
-
-		env.getConfig().disableSysoutLogging();
-		JobExecutionResult res = env.execute("Sandbox");
-		return res.getNetRuntime();
-	}
 
 	private static final class BipartitenessMapper implements MapFunction<Candidate, Candidate> {
 		private Candidate candidate = null;
@@ -211,5 +230,66 @@ public class StreamedBipartiteness {
 
 			out.collect(candidate);
 		}
+	}
+
+	// *************************************************************************
+	//     UTIL METHODS
+	// *************************************************************************
+
+	private static boolean fileOutput = false;
+	private static String edgeInputPath = null;
+	private static String outputPath = null;
+
+	private static boolean parseParameters(String[] args) {
+
+		if(args.length > 0) {
+			if(args.length != 2) {
+				System.err.println("Usage: BipartitenessCheck <input edges path> <output path>");
+				return false;
+			}
+
+			fileOutput = true;
+			edgeInputPath = args[0];
+			outputPath = args[1];
+		} else {
+			System.out.println("Executing BipartitenessCheck example with default parameters and built-in default data.");
+			System.out.println("  Provide parameters to read input data from files.");
+			System.out.println("  See the documentation for the correct format of input files.");
+			System.out.println("  Usage: BipartitenessCheck <input edges path> <output path>");
+		}
+		return true;
+	}
+
+	@SuppressWarnings("serial")
+	private static DataStream<Edge<Long, NullValue>> getEdgesDataSet(StreamExecutionEnvironment env) {
+
+		if (fileOutput) {
+			return env.readTextFile(edgeInputPath)
+					.map(new MapFunction<String, Edge<Long, NullValue>>() {
+						@Override
+						public Edge<Long, NullValue> map(String s) throws Exception {
+							String[] fields = s.split("\\t");
+							long src = Long.parseLong(fields[0]);
+							long trg = Long.parseLong(fields[1]);
+							return new Edge<>(src, trg, NullValue.getInstance());
+						}
+					});
+		}
+
+		return env.generateSequence(1, 100).flatMap(
+				new FlatMapFunction<Long, Edge<Long, NullValue>>() {
+					@Override
+					public void flatMap(Long key, Collector<Edge<Long, NullValue>> out) throws Exception {
+						for (int i = 0; i < 10; i++) {
+							long target = key * 2 + 1;
+							out.collect(new Edge<>(key, target, NullValue.getInstance()));
+						}
+					}
+				});
+	}
+
+	@Override
+	public String getDescription() {
+		return "Bipartiteness Check";
 	}
 }

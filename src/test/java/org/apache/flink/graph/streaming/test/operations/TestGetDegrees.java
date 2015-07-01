@@ -66,6 +66,7 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 
 		graph.getDegrees().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
+
 		expectedResult = "1,1\n" +
 				"1,2\n" +
 				"1,3\n" +

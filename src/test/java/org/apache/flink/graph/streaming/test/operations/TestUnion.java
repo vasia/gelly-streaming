@@ -22,6 +22,7 @@ import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.StreamingProgramTestBase;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
 import org.junit.After;
 import org.junit.Before;
@@ -34,12 +35,7 @@ import org.junit.runners.Parameterized;
 import java.util.ArrayList;
 import java.util.List;
 
-@RunWith(Parameterized.class)
-public class TestUnion extends MultipleProgramsTestBase {
-
-	public TestUnion(TestExecutionMode mode) {
-		super(mode);
-	}
+public class TestUnion extends StreamingProgramTestBase {
 
 	private String resultPath;
 	private String expectedResult;
@@ -47,19 +43,19 @@ public class TestUnion extends MultipleProgramsTestBase {
 	@Rule
 	public TemporaryFolder tempFolder = new TemporaryFolder();
 
-	@Before
-	public void before() throws Exception {
+	@Override
+	protected void preSubmit() throws Exception {
 		resultPath = tempFolder.newFile().toURI().toString();
 	}
 
-	@After
-	public void after() throws Exception {
+	@Override
+	protected void postSubmit() throws Exception {
 		compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
 
-	@Test
-	public void testUnion() throws Exception {
-		/*
+	@Override
+	protected void testProgram() throws Exception {
+		     /*
 		 * Test union() with two simple graphs
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -95,4 +91,5 @@ public class TestUnion extends MultipleProgramsTestBase {
 				"4,5,45\n" +
 				"5,1,51\n";
 	}
+
 }

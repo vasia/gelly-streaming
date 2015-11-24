@@ -24,6 +24,7 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.StreamingProgramTestBase;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
 import org.junit.After;
 import org.junit.Before;
@@ -33,12 +34,7 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@RunWith(Parameterized.class)
-public class TestFilterEdges extends MultipleProgramsTestBase {
-
-	public TestFilterEdges(TestExecutionMode mode) {
-		super(mode);
-	}
+public class TestFilterEdges extends StreamingProgramTestBase {
 
 	private String resultPath;
 	private String expectedResult;
@@ -46,17 +42,23 @@ public class TestFilterEdges extends MultipleProgramsTestBase {
 	@Rule
 	public TemporaryFolder tempFolder = new TemporaryFolder();
 
-	@Before
-	public void before() throws Exception {
-		resultPath = tempFolder.newFile().toURI().toString();
-	}
+    @Override
+    protected void preSubmit() throws Exception {
+        resultPath = tempFolder.newFile().toURI().toString();
+    }
 
-	@After
-	public void after() throws Exception {
-		compareResultsByLinesInMemory(expectedResult, resultPath);
-	}
+    @Override
+    protected void postSubmit() throws Exception {
+        compareResultsByLinesInMemory(expectedResult, resultPath);
+    }
 
-	@Test
+    @Override
+    protected void testProgram() throws Exception {
+        testWithSimpleFilter();
+        testWithDiscardFilter();
+        testWithEmptyFilter();
+    }
+
 	public void testWithSimpleFilter() throws Exception {
 		/*
 		 * Test filterEdges() with a simple filter
@@ -76,7 +78,9 @@ public class TestFilterEdges extends MultipleProgramsTestBase {
 				"5,1,51\n";
 	}
 
-	private static final class LowEdgeValueFilter implements FilterFunction<Edge<Long, Long>> {
+
+
+    private static final class LowEdgeValueFilter implements FilterFunction<Edge<Long, Long>> {
 
 		@Override
 		public boolean filter(Edge<Long, Long> edge) throws Exception {
@@ -84,7 +88,6 @@ public class TestFilterEdges extends MultipleProgramsTestBase {
 		}
 	}
 
-	@Test
 	public void testWithEmptyFilter() throws Exception {
 		/*
 		 * Test filterEdges() with a filter that constantly returns true
@@ -114,7 +117,6 @@ public class TestFilterEdges extends MultipleProgramsTestBase {
 		}
 	}
 
-	@Test
 	public void testWithDiscardFilter() throws Exception {
 		/*
 		 * Test filterEdges() with a filter that constantly returns false

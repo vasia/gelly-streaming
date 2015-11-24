@@ -24,6 +24,7 @@ import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.StreamingProgramTestBase;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
 import org.junit.After;
 import org.junit.Before;
@@ -33,12 +34,7 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@RunWith(Parameterized.class)
-public class TestNumberOfEntities extends MultipleProgramsTestBase {
-
-	public TestNumberOfEntities(TestExecutionMode mode) {
-		super(mode);
-	}
+public class TestNumberOfEntities extends StreamingProgramTestBase {
 
 	private String resultPath;
 	private String expectedResult;
@@ -46,17 +42,22 @@ public class TestNumberOfEntities extends MultipleProgramsTestBase {
 	@Rule
 	public TemporaryFolder tempFolder = new TemporaryFolder();
 
-	@Before
-	public void before() throws Exception {
+	@Override
+	protected void preSubmit() throws Exception {
 		resultPath = tempFolder.newFile().toURI().toString();
 	}
 
-	@After
-	public void after() throws Exception {
+	@Override
+	protected void postSubmit() throws Exception {
 		compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
 
-	@Test
+	@Override
+	protected void testProgram() throws Exception {
+		testNumberOfEdges();
+		testNumberOfVertices();
+	}
+
 	public void testNumberOfVertices() throws Exception {
 		/*
 		 * Test numberOfVertices() with the sample graph
@@ -81,7 +82,6 @@ public class TestNumberOfEntities extends MultipleProgramsTestBase {
 				"5\n";
 	}
 
-	@Test
 	public void testNumberOfEdges() throws Exception {
 		/*
 		 * Test numberOfEdges() with the sample graph

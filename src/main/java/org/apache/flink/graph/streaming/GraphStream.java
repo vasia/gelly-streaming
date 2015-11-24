@@ -34,8 +34,10 @@ import org.apache.flink.graph.Vertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.RichWindowMapFunction;
+import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.RichAllWindowFunction;
 import org.apache.flink.streaming.api.windowing.helper.Count;
-import org.apache.flink.streaming.api.windowing.helper.WindowingHelper;
+import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
@@ -85,7 +87,7 @@ public class GraphStream<K, EV> {
 	public DataStream<Vertex<K, NullValue>> getVertices() {
 		return this.edges
 				.flatMap(new EmitSrcAndTarget<K, EV>())
-				.groupBy(0)
+				.keyBy(0)
 				.filter(new FilterDistinctVertices<K>());
 	}
 
@@ -208,7 +210,7 @@ public class GraphStream<K, EV> {
 	 */
 	public GraphStream<K, EV> distinct() {
 		DataStream<Edge<K, EV>> edgeStream = this.edges
-				.groupBy(0)
+				.keyBy(0)
 				.flatMap(new DistinctEdgeMapper<K, EV>());
 
 		return new GraphStream<>(edgeStream, this.getContext());
@@ -388,7 +390,7 @@ public class GraphStream<K, EV> {
 	public <VV> DataStream<Vertex<K, VV>> aggregate(FlatMapFunction<Edge<K, EV>, Vertex<K, VV>> edgeMapper,
 			MapFunction<Vertex<K, VV>, Vertex<K, VV>> vertexMapper) {
 		return this.edges.flatMap(edgeMapper)
-				.groupBy(0)
+				.keyBy(0)
 				.map(vertexMapper);
 	}
 
@@ -451,7 +453,6 @@ public class GraphStream<K, EV> {
 		DataStream<Tuple2<Integer, T>> chainedStream = this.edges
 				.flatMap(new MergeTreeWrapperMapper<>(initMapper));
 
-
 		for (int i = 0; i < levels; ++i) {
 			chainedStream = chainedStream
 					.window(window)
@@ -459,7 +460,7 @@ public class GraphStream<K, EV> {
 					.flatten();
 
 			if (i < levels - 1) {
-				chainedStream = chainedStream.groupBy(new MergeTreeKeySelector<T>(i));
+				chainedStream = chainedStream.keyBy(new MergeTreeKeySelector<T>(i));
 			}
 		}
 
@@ -499,21 +500,21 @@ public class GraphStream<K, EV> {
 	}
 
 	private static final class MergeTreeWindowMapper<T>
-			extends RichWindowMapFunction<Tuple2<Integer, T>, Tuple2<Integer, T>> {
+			extends RichAllWindowFunction<Tuple2<Integer, T>, Tuple2<Integer, T>> {
 		private final MapFunction<T, T> treeMapper;
 
 		public MergeTreeWindowMapper(MapFunction<T, T> treeMapper) {
 			this.treeMapper = treeMapper;
 		}
-
+		
 		@Override
-		public void mapWindow(Iterable<Tuple2<Integer, T>> iterable,
-				Collector<Tuple2<Integer, T>> out) throws Exception {
-			T t = null;
-			for (Tuple2<Integer, T> entry : iterable) {
-				t = treeMapper.map(entry.f1);
-			}
-			out.collect(new Tuple2<>(getRuntimeContext().getIndexOfThisSubtask(), t));
+		public void apply(Window window, Iterable iterable, Collector collector) throws Exception {
+			Collector<Tuple2<Integer, T>> out)  {
+				T t = null;
+				for (Tuple2<Integer, T> entry : iterable) {
+					t = treeMapper.map(entry.f1);
+				}
+				out.collect(new Tuple2<>((, t));
 		}
 	}
 

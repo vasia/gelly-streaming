@@ -25,6 +25,7 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.StreamingProgramTestBase;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
 import org.junit.After;
 import org.junit.Before;
@@ -34,12 +35,7 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@RunWith(Parameterized.class)
-public class TestMapEdges extends MultipleProgramsTestBase {
-
-	public TestMapEdges(TestExecutionMode mode) {
-		super(mode);
-	}
+public class TestMapEdges extends StreamingProgramTestBase {
 
 	private String resultPath;
 	private String expectedResult;
@@ -47,17 +43,23 @@ public class TestMapEdges extends MultipleProgramsTestBase {
 	@Rule
 	public TemporaryFolder tempFolder = new TemporaryFolder();
 
-	@Before
-	public void before() throws Exception {
+	@Override
+	protected void preSubmit() throws Exception {
 		resultPath = tempFolder.newFile().toURI().toString();
 	}
 
-	@After
-	public void after() throws Exception {
+	@Override
+	protected void postSubmit() throws Exception {
 		compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
 
-	@Test
+	@Override
+	public void testJob() throws Exception {
+		testWithSameType();
+		testWithTupleType();
+		testChainedMaps();
+	}
+
 	public void testWithSameType() throws Exception {
 		/*
 		 * Test mapEdges() keeping the same edge types
@@ -79,6 +81,11 @@ public class TestMapEdges extends MultipleProgramsTestBase {
 				"5,1,52\n";
 	}
 
+	@Override
+	protected void testProgram() throws Exception {
+		
+	}
+
 	private static final class AddOneMapper implements MapFunction<Edge<Long, Long>, Long> {
 		@Override
 		public Long map(Edge<Long, Long> edge) throws Exception {
@@ -86,7 +93,6 @@ public class TestMapEdges extends MultipleProgramsTestBase {
 		}
 	}
 
-	@Test
 	public void testWithTupleType() throws Exception {
 		/*
 		 * Test mapEdges() converting the edge value type to tuple
@@ -115,7 +121,6 @@ public class TestMapEdges extends MultipleProgramsTestBase {
 		}
 	}
 
-	@Test
 	public void testChainedMaps() throws Exception {
 		/*
 		 * Test mapEdges() where two maps are chained together

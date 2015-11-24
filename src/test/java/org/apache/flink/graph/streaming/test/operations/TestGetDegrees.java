@@ -22,6 +22,7 @@ import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.StreamingProgramTestBase;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
 import org.junit.After;
 import org.junit.Before;
@@ -31,12 +32,8 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@RunWith(Parameterized.class)
-public class TestGetDegrees extends MultipleProgramsTestBase {
+public class TestGetDegrees extends StreamingProgramTestBase {
 
-	public TestGetDegrees(TestExecutionMode mode) {
-		super(mode);
-	}
 
 	private String resultPath;
 	private String expectedResult;
@@ -44,17 +41,23 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 	@Rule
 	public TemporaryFolder tempFolder = new TemporaryFolder();
 
-	@Before
-	public void before() throws Exception {
+	@Override
+	protected void preSubmit() throws Exception {
 		resultPath = tempFolder.newFile().toURI().toString();
 	}
 
-	@After
-	public void after() throws Exception {
+	@Override
+	protected void postSubmit() throws Exception {
 		compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
 
-	@Test
+	@Override
+	protected void testProgram() throws Exception {
+		testGetDegrees();
+		testGetInDegrees();
+		testGetOutDegrees();
+	}
+	
 	public void testGetDegrees() throws Exception {
 		/*
 		 * Test getDegrees() with the sample graph
@@ -83,7 +86,6 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 				"5,3\n";
 	}
 
-	@Test
 	public void testGetInDegrees() throws Exception {
 		/*
 		 * Test getInDegrees() with the sample graph
@@ -104,7 +106,6 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 				"5,2\n";
 	}
 
-	@Test
 	public void testGetOutDegrees() throws Exception {
 		/*
 		 * Test getOutDegrees() with the sample graph
@@ -124,4 +125,6 @@ public class TestGetDegrees extends MultipleProgramsTestBase {
 				"4,1\n" +
 				"5,1\n";
 	}
+
+
 }

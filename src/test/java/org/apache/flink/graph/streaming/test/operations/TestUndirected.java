@@ -22,6 +22,7 @@ import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.StreamingProgramTestBase;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
 import org.junit.After;
 import org.junit.Before;
@@ -31,12 +32,8 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@RunWith(Parameterized.class)
-public class TestUndirected extends MultipleProgramsTestBase {
+public class TestUndirected extends StreamingProgramTestBase {
 
-	public TestUndirected(TestExecutionMode mode) {
-		super(mode);
-	}
 
 	private String resultPath;
 	private String expectedResult;
@@ -44,19 +41,19 @@ public class TestUndirected extends MultipleProgramsTestBase {
 	@Rule
 	public TemporaryFolder tempFolder = new TemporaryFolder();
 
-	@Before
-	public void before() throws Exception {
+	@Override
+	protected void preSubmit() throws Exception {
 		resultPath = tempFolder.newFile().toURI().toString();
 	}
 
-	@After
-	public void after() throws Exception {
+	@Override
+	protected void postSubmit() throws Exception {
 		compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
 
-	@Test
-	public void testUndirected() throws Exception {
-		/*
+	@Override
+	protected void testProgram() throws Exception {
+		     /*
 		 * Test undirected() with the sample graph
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();

@@ -23,63 +23,53 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.test.util.MultipleProgramsTestBase;
-import org.junit.After;
-import org.junit.Before;
+import org.apache.flink.streaming.util.StreamingProgramTestBase;
 import org.junit.Rule;
-import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 
 import java.util.List;
 
-@RunWith(Parameterized.class)
-public class TestDistinct extends MultipleProgramsTestBase {
+public class TestDistinct extends StreamingProgramTestBase {
 
-	public TestDistinct(TestExecutionMode mode) {
-		super(mode);
-	}
+    private String resultPath;
+    private String expectedResult;
+    
+    @Rule
+    public TemporaryFolder tempFolder = new TemporaryFolder();
 
-	private String resultPath;
-	private String expectedResult;
+    @Override
+    protected void preSubmit() throws Exception {
+        resultPath = tempFolder.newFile().toURI().toString();
+    }
 
-	@Rule
-	public TemporaryFolder tempFolder = new TemporaryFolder();
+    @Override
+    protected void postSubmit() throws Exception {
+        compareResultsByLinesInMemory(expectedResult, resultPath);
+    }
 
-	@Before
-	public void before() throws Exception {
-		resultPath = tempFolder.newFile().toURI().toString();
-	}
-
-	@After
-	public void after() throws Exception {
-		compareResultsByLinesInMemory(expectedResult, resultPath);
-	}
-
-	@Test
-	public void testDistinct() throws Exception {
-		/*
-		 * Test distinct() with the sample graph duplicated
+    @Override
+    protected void testProgram() throws Exception {
+                 /*
+         * Test distinct() with the sample graph duplicated
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		List<Edge<Long, Long>> edges = GraphStreamTestUtils.getLongLongEdges();
-		edges.addAll(GraphStreamTestUtils.getLongLongEdges());
+        List<Edge<Long, Long>> edges = GraphStreamTestUtils.getLongLongEdges();
+        edges.addAll(GraphStreamTestUtils.getLongLongEdges());
 
 		GraphStream<Long, Long> graph =
 				new GraphStream<>(env.fromCollection(edges), env);
 
-		graph.distinct().getEdges()
-				.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+        graph.distinct().getEdges()
+                .writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 
-		env.execute();
-		expectedResult = "1,2,12\n" +
-				"1,3,13\n" +
-				"2,3,23\n" +
-				"3,4,34\n" +
-				"3,5,35\n" +
-				"4,5,45\n" +
-				"5,1,51\n";
-	}
+        env.execute();
+        expectedResult = "1,2,12\n" +
+                "1,3,13\n" +
+                "2,3,23\n" +
+                "3,4,34\n" +
+                "3,5,35\n" +
+                "4,5,45\n" +
+                "5,1,51\n";
+    }
 }

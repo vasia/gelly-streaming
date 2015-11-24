@@ -24,6 +24,7 @@ import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.util.StreamingProgramTestBase;
 import org.apache.flink.test.util.MultipleProgramsTestBase;
 import org.apache.flink.types.NullValue;
 import org.junit.After;
@@ -34,12 +35,7 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@RunWith(Parameterized.class)
-public class TestFilterVertices extends MultipleProgramsTestBase {
-
-	public TestFilterVertices(TestExecutionMode mode) {
-		super(mode);
-	}
+public class TestFilterVertices extends StreamingProgramTestBase {
 
 	private String resultPath;
 	private String expectedResult;
@@ -47,17 +43,23 @@ public class TestFilterVertices extends MultipleProgramsTestBase {
 	@Rule
 	public TemporaryFolder tempFolder = new TemporaryFolder();
 
-	@Before
-	public void before() throws Exception {
+	@Override
+	protected void testProgram() throws Exception {
+		testWithSimpleFilter();
+		testWithDiscardFilter();
+		testWithEmptyFilter();
+	}
+
+	@Override
+	protected void preSubmit() throws Exception {
 		resultPath = tempFolder.newFile().toURI().toString();
 	}
 
-	@After
-	public void after() throws Exception {
+	@Override
+	protected void postSubmit() throws Exception {
 		compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
 
-	@Test
 	public void testWithSimpleFilter() throws Exception {
 		/*
 		 * Test filterVertices() with a simple filter
@@ -84,7 +86,6 @@ public class TestFilterVertices extends MultipleProgramsTestBase {
 		}
 	}
 
-	@Test
 	public void testWithEmptyFilter() throws Exception {
 		/*
 		 * Test filterVertices() with a filter that constantly returns true
@@ -114,7 +115,6 @@ public class TestFilterVertices extends MultipleProgramsTestBase {
 		}
 	}
 
-	@Test
 	public void testWithDiscardFilter() throws Exception {
 		/*
 		 * Test filterVertices() with a filter that constantly returns false

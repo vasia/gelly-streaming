@@ -18,24 +18,15 @@
 
 package org.apache.flink.graph.streaming.example.bipartiteness;
 
-import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.ProgramDescription;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.DataSet;
-import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.Graph;
-import org.apache.flink.graph.Vertex;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.example.bipartiteness.util.Candidate;
 import org.apache.flink.graph.streaming.example.bipartiteness.util.SignedVertex;
-import org.apache.flink.graph.utils.Tuple3ToEdgeMap;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.windowing.helper.Count;
-import org.apache.flink.streaming.api.windowing.helper.Time;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
@@ -43,7 +34,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /**
  * The bipartiteness check example tests whether an input graph is bipartite
@@ -66,7 +56,7 @@ public class BipartitenessCheck implements ProgramDescription {
 		// Process bipartiteness
 		GraphStream<Long, NullValue> graph = new GraphStream<>(edges, env);
 		DataStream<Candidate> bipartition = graph.mergeTree(new InitCandidateMapper(),
-				new BipartitenessMapper(), Time.of(1, TimeUnit.SECONDS));
+				new BipartitenessMapper(), 1000l);
 
 		// Emit the results
 		if (fileOutput) {

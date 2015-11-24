@@ -25,7 +25,6 @@ import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
@@ -33,20 +32,20 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.RichWindowMapFunction;
 import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.RichAllWindowFunction;
-import org.apache.flink.streaming.api.windowing.helper.Count;
+import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.triggers.Trigger;
+import org.apache.flink.streaming.api.windowing.windows.GlobalWindow;
+import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 
 /**
@@ -440,13 +439,13 @@ public class GraphStream<K, EV> {
 	 *
 	 * @param initMapper the map function that transforms edges into the intermediate data type
 	 * @param treeMapper the map function that performs the aggregation between the data elements
-	 * @param window the window to use before the first level
+	 * @param timeMillis the time to buffer a window before the first level
 	 * @param <T> the inner data type
 	 * @param <U> the window data type
 	 * @return an aggregated stream of the given data type
 	 */
-	public <T, U> DataStream<T> mergeTree(FlatMapFunction<Edge<K, EV>, T> initMapper,
-			MapFunction<T, T> treeMapper, WindowingHelper<U> window) {
+	public <T, U extends Window> DataStream<T> mergeTree(FlatMapFunction<Edge<K, EV>, T> initMapper,
+			MapFunction<T, T> treeMapper, long timeMillis) {
 		int dop = this.context.getParallelism();
 		int levels = (int) (Math.log(dop) / Math.log(2));
 
@@ -454,10 +453,9 @@ public class GraphStream<K, EV> {
 				.flatMap(new MergeTreeWrapperMapper<>(initMapper));
 
 		for (int i = 0; i < levels; ++i) {
-			chainedStream = chainedStream
-					.window(window)
-					.mapWindow(new MergeTreeWindowMapper<>(treeMapper))
-					.flatten();
+			chainedStream = chainedStream.
+					timeWindowAll(Time.milliseconds(timeMillis))
+					.apply(new MergeTreeWindowMapper<>(treeMapper));
 
 			if (i < levels - 1) {
 				chainedStream = chainedStream.keyBy(new MergeTreeKeySelector<T>(i));
@@ -499,26 +497,26 @@ public class GraphStream<K, EV> {
 		}
 	}
 
+	
 	private static final class MergeTreeWindowMapper<T>
-			extends RichAllWindowFunction<Tuple2<Integer, T>, Tuple2<Integer, T>> {
+			extends RichAllWindowFunction<Tuple2<Integer, T>, Tuple2<Integer, T>, TimeWindow> implements AllWindowFunction<Tuple2<Integer, T>, Tuple2<Integer, T>, TimeWindow> {
 		private final MapFunction<T, T> treeMapper;
 
 		public MergeTreeWindowMapper(MapFunction<T, T> treeMapper) {
 			this.treeMapper = treeMapper;
 		}
-		
+
 		@Override
-		public void apply(Window window, Iterable iterable, Collector collector) throws Exception {
-			Collector<Tuple2<Integer, T>> out)  {
+		public void apply(TimeWindow globalWindow, Iterable<Tuple2<Integer, T>> iterable, Collector<Tuple2<Integer, T>> collector) throws Exception {
 				T t = null;
 				for (Tuple2<Integer, T> entry : iterable) {
 					t = treeMapper.map(entry.f1);
 				}
-				out.collect(new Tuple2<>((, t));
-		}
+				collector.collect(new Tuple2<>((getRuntimeContext().getIndexOfThisSubtask()), t));
+			}
 	}
 
-	private static final class MergeTreeKeySelector<T>
+		private static final class MergeTreeKeySelector<T>
 			implements KeySelector<Tuple2<Integer, T>, Integer> {
 		private int level;
 

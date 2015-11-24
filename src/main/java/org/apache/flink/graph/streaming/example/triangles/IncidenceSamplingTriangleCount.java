@@ -38,7 +38,7 @@ public class IncidenceSamplingTriangleCount implements ProgramDescription {
 		DataStream<Tuple2<Integer, Integer>> triangles = edges
 				.flatMap(new EdgeSampleMapper(localSamples, env.getParallelism()))
 				.setParallelism(1)
-				.groupBy(0)
+				.keyBy(0)
 				.flatMap(new TriangleSampleMapper(localSamples, vertexCount))
 				.flatMap(new TriangleSummer(samples, vertexCount))
 				.setParallelism(1);

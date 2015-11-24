@@ -249,7 +249,6 @@ public class GraphStream<K, EV> {
 	 * @param graph the streamed graph to union with
 	 * @return a streamed graph where the two edge streams are merged
 	 */
-	@SuppressWarnings("unchecked")
 	public GraphStream<K, EV> union(GraphStream<K, EV> graph) {
 		return new GraphStream<>(this.edges.union(graph.getEdges()), this.getContext());
 	}
@@ -258,8 +257,17 @@ public class GraphStream<K, EV> {
 	 * @return a graph stream where edges are undirected
 	 */
 	public GraphStream<K, EV> undirected() {
-		return this.union(this.reverse());
+		DataStream<Edge<K, EV>> reversedEdges = this.edges.flatMap(new UndirectEdges<K, EV>());
+		return new GraphStream<>(reversedEdges, context);
 	}
+
+	private static final class UndirectEdges<K, EV>	implements FlatMapFunction<Edge<K,EV>, Edge<K,EV>> {
+		@Override
+		public void flatMap(Edge<K, EV> edge, Collector<Edge<K, EV>> out) {
+			out.collect(edge);
+			out.collect(edge.reverse());
+		}
+	};
 
 	/**
 	 * @return a continuously improving data stream representing the number of vertices in the streamed graph

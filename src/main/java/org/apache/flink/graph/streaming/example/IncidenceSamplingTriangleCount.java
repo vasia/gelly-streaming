@@ -1,4 +1,4 @@
-package org.apache.flink.graph.streaming.example.triangles;
+package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.ProgramDescription;
 import org.apache.flink.api.common.functions.FlatMapFunction;
@@ -6,7 +6,8 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.example.triangles.util.TriangleEstimate;
+import org.apache.flink.graph.streaming.example.util.SampledEdge;
+import org.apache.flink.graph.streaming.example.util.TriangleEstimate;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
@@ -17,13 +18,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 
-/**
- * The broadcast triangle count example estimates the number of triangles
- * in a streamed graph. The output is in <edges, triangles> format, where
- * edges refers to the number of edges processed so far.
- */
-public class BroadcastTriangleCount implements ProgramDescription {
+public class IncidenceSamplingTriangleCount implements ProgramDescription {
 
 	public static void main(String[] args) throws Exception {
 
@@ -39,8 +36,10 @@ public class BroadcastTriangleCount implements ProgramDescription {
 
 		// Count triangles
 		DataStream<Tuple2<Integer, Integer>> triangles = edges
-				.broadcast()
-				.flatMap(new TriangleSampler(localSamples, vertexCount))
+				.flatMap(new EdgeSampleMapper(localSamples, env.getParallelism()))
+				.setParallelism(1)
+				.keyBy(0)
+				.flatMap(new TriangleSampleMapper(localSamples, vertexCount))
 				.flatMap(new TriangleSummer(samples, vertexCount))
 				.setParallelism(1);
 
@@ -51,20 +50,83 @@ public class BroadcastTriangleCount implements ProgramDescription {
 			triangles.print();
 		}
 
-		env.execute("Broadcast Triangle Count");
+		env.execute("Incidence Sampling Triangle Count");
 	}
 
 	// *************************************************************************
 	//     TRIANGLE COUNT FUNCTIONS
 	// *************************************************************************
 
-	private static final class TriangleSampler extends RichFlatMapFunction<Edge<Long, NullValue>, TriangleEstimate> {
+	private static final class EdgeSampleMapper extends RichFlatMapFunction<Edge<Long, NullValue>, SampledEdge> {
+		private final int instanceSize, p;
+		private final List<Random> randoms;
+		private final List<Edge<Long, NullValue>> samples;
+
+		private int edgeCount;
+
+		public EdgeSampleMapper(int instanceSize, int p) {
+			this.instanceSize = instanceSize;
+			this.p = p;
+
+			this.edgeCount = 0;
+
+			// Initialize seeds
+			randoms = new ArrayList<>();
+			samples = new ArrayList<>();
+
+			Random r = new Random(0xDEADBEEF);
+			for (int i = 0; i < instanceSize * p; ++i) {
+				randoms.add(new Random(r.nextInt()));
+				samples.add(null);
+			}
+
+		}
+
+		@Override
+		public void flatMap(Edge<Long, NullValue> edge, Collector<SampledEdge> out) throws Exception {
+			this.edgeCount++;
+
+			// Flip a coin for all instances
+			for (int i = 0; i < instanceSize * p; ++i) {
+				boolean sample = Coin.flip(this.edgeCount, randoms.get(i));
+				int subtask = i % p;
+				int instance = i / p;
+
+				if (sample) {
+					out.collect(new SampledEdge(subtask, instance, edge, edgeCount, true));
+					samples.set(i, edge);
+
+					// emitCount++;
+				} else if (samples.get(i) != null) {
+					// Check if the edge is incident to the sampled one
+					Edge<Long, NullValue> e = samples.get(i);
+					boolean incidence = e.getSource().equals(edge.getSource())
+							|| e.getSource().equals(edge.getTarget())
+							|| e.getTarget().equals(edge.getSource())
+							|| e.getTarget().equals(edge.getTarget());
+
+					if (incidence) {
+						out.collect(new SampledEdge(subtask, instance, edge, edgeCount, false));
+						// emitCount++;
+					}
+				}
+			}
+
+			/*
+			if (edgeCount % 1000 == 0) {
+				System.out.printf("Emit rate: %.2f\n", (double) emitCount / (double) edgeCount);
+			}
+			*/
+		}
+	}
+
+	private static final class TriangleSampleMapper extends RichFlatMapFunction<SampledEdge, TriangleEstimate> {
 		private List<SampleTriangleState> states;
 		private int edgeCount;
 		private int previousResult;
 		private int vertices;
 
-		public TriangleSampler(int size, int vertices) {
+		public TriangleSampleMapper(int size, int vertices) {
 			this.states = new ArrayList<>();
 			this.edgeCount = 0;
 			this.previousResult = 0;
@@ -76,59 +138,64 @@ public class BroadcastTriangleCount implements ProgramDescription {
 		}
 
 		@Override
-		public void flatMap(Edge<Long, NullValue> edge, Collector<TriangleEstimate> out) throws Exception {
+		public void flatMap(SampledEdge input, Collector<TriangleEstimate> out) throws Exception {
+			Edge<Long, NullValue> edge = input.getEdge();
+
 			// Update edge count
-			edgeCount++;
+			edgeCount = input.getEdgeCount();
 
-			int localBetaSum = 0;
+			SampleTriangleState state = states.get(input.getInstance());
 
-			// Process the edge for all instances
-			for (SampleTriangleState state : states) {
+			// With probability 1/i sample a candidate (already flipped the coin during partitioning)
+			if (input.isResampled()) {
+				state.srcVertex = edge.getSource();
+				state.trgVertex = edge.getTarget();
 
-				// Flip a coin and with probability 1/i sample a candidate
-				if (Coin.flip(state)) {
-					state.srcVertex = edge.getSource();
-					state.trgVertex = edge.getTarget();
+				// Randomly sample the third vertex from V \ {src, trg}
+				while (true) {
+					state.thirdVertex = (int) Math.floor(Math.random() * vertices);
 
-					// Randomly sample the third vertex from V \ {src, trg}
-					while (true) {
-						state.thirdVertex = (int) Math.floor(Math.random() * vertices);
-
-						if (state.thirdVertex != state.srcVertex && state.thirdVertex != state.trgVertex) {
-							break;
-						}
+					if (state.thirdVertex != state.srcVertex && state.thirdVertex != state.trgVertex) {
+						break;
 					}
-
-					state.srcEdgeFound = false;
-					state.trgEdgeFound = false;
-					state.beta = 0;
 				}
 
-				if (state.beta == 0) {
-					// Check if any of the two remaining edges in the candidate has been found
-					if ((edge.getSource() == state.srcVertex && edge.getTarget() == state.thirdVertex)
-							|| (edge.getSource() == state.thirdVertex && edge.getTarget() == state.srcVertex)) {
-						state.srcEdgeFound = true;
-					}
-
-					if ((edge.getSource() == state.trgVertex && edge.getTarget() == state.thirdVertex)
-							|| (edge.getSource() == state.thirdVertex && edge.getTarget() == state.trgVertex)) {
-						state.trgEdgeFound = true;
-					}
-
-					state.beta = (state.srcEdgeFound && state.trgEdgeFound) ? 1 : 0;
-				}
-
-				if (state.beta == 1) {
-					localBetaSum++;
-				}
+				state.srcEdgeFound = false;
+				state.trgEdgeFound = false;
+				state.beta = 0;
 			}
 
-			if (localBetaSum != previousResult) {
-				previousResult = localBetaSum;
+			// Update beta
+			boolean triangleFound = false;
+			if (state.beta == 0) {
+				// Check if any of the two remaining edges in the candidate has been found
+				if ((edge.getSource() == state.srcVertex && edge.getTarget() == state.thirdVertex)
+						|| (edge.getSource() == state.thirdVertex && edge.getTarget() == state.srcVertex)) {
+					state.srcEdgeFound = true;
+				}
 
-				int source = getRuntimeContext().getIndexOfThisSubtask();
-				out.collect(new TriangleEstimate(source, edgeCount, localBetaSum));
+				if ((edge.getSource() == state.trgVertex && edge.getTarget() == state.thirdVertex)
+						|| (edge.getSource() == state.thirdVertex && edge.getTarget() == state.trgVertex)) {
+					state.trgEdgeFound = true;
+				}
+
+				triangleFound = (state.srcEdgeFound && state.trgEdgeFound);
+				state.beta = triangleFound ? 1 : 0;
+			}
+
+			// Sum local betas
+			if (triangleFound) {
+				int localBetaSum = 0;
+				for (SampleTriangleState s : states) {
+					localBetaSum += s.beta;
+				}
+
+				if (localBetaSum != previousResult) {
+					previousResult = localBetaSum;
+
+					int source = getRuntimeContext().getIndexOfThisSubtask();
+					out.collect(new TriangleEstimate(source, edgeCount, localBetaSum));
+				}
 			}
 		}
 	}
@@ -195,13 +262,11 @@ public class BroadcastTriangleCount implements ProgramDescription {
 	}
 
 	private static final class Coin {
-		public static boolean flip(SampleTriangleState state) {
-			boolean result = (Math.random() * (state.i) < 1);
-			state.i++;
-
-			return result;
+		public static boolean flip(int size, Random rnd) {
+			return rnd.nextDouble() * size <= 1.0;
 		}
 	}
+
 
 	// *************************************************************************
 	//     UTIL METHODS
@@ -217,7 +282,7 @@ public class BroadcastTriangleCount implements ProgramDescription {
 
 		if(args.length > 0) {
 			if(args.length != 4) {
-				System.err.println("Usage: BroadcastTriangleCount <input edges path> <output path> <vertex count> <sample count>");
+				System.err.println("Usage: IncidenceSamplingTriangleCount <input edges path> <output path> <vertex count> <sample count>");
 				return false;
 			}
 
@@ -227,10 +292,10 @@ public class BroadcastTriangleCount implements ProgramDescription {
 			vertexCount = Integer.parseInt(args[2]);
 			samples = Integer.parseInt(args[3]);
 		} else {
-			System.out.println("Executing BroadcastTriangleCount example with default parameters and built-in default data.");
+			System.out.println("Executing IncidenceSamplingTriangleCount example with default parameters and built-in default data.");
 			System.out.println("  Provide parameters to read input data from files.");
 			System.out.println("  See the documentation for the correct format of input files.");
-			System.out.println("  Usage: BroadcastTriangleCount <input edges path> <output path> <vertex count> <sample count>");
+			System.out.println("  Usage: IncidenceSamplingTriangleCount <input edges path> <output path> <vertex count> <sample count>");
 		}
 		return true;
 	}
@@ -263,6 +328,6 @@ public class BroadcastTriangleCount implements ProgramDescription {
 
 	@Override
 	public String getDescription() {
-		return "Broadcast Triangle Count";
+		return "Incidence Sampling Triangle Count";
 	}
 }

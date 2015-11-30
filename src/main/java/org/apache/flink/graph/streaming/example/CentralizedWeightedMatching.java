@@ -16,14 +16,14 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.matchings;
+package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
-import org.apache.flink.graph.streaming.example.matchings.util.MatchingEvent;
+import org.apache.flink.graph.streaming.example.util.MatchingEvent;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.util.Collector;

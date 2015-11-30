@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.bipartiteness.util;
+package org.apache.flink.graph.streaming.example.util;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 

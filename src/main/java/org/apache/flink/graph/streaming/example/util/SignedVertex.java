@@ -16,29 +16,27 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.triangles.util;
+package org.apache.flink.graph.streaming.example.util;
 
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple2;
 
-public class TriangleEstimate extends Tuple3<Integer, Integer, Integer> {
+public class SignedVertex extends Tuple2<Long, Boolean> {
 
-	public TriangleEstimate() {}
+	public SignedVertex() {}
 
-	public TriangleEstimate(int source, int edges, int beta) throws Exception {
-		this.f0 = source;
-		this.f1 = edges;
-		this.f2 = beta;
+	public SignedVertex(long vertex, boolean sign) {
+		super(vertex, sign);
 	}
 
-	public int getSource() {
+	public long getVertex() {
 		return this.f0;
 	}
 
-	public int getEdgeCount() {
+	public boolean getSign() {
 		return this.f1;
 	}
 
-	public int getBeta() {
-		return this.f2;
+	public SignedVertex reverse() {
+		return new SignedVertex(this.getVertex(), !this.getSign());
 	}
 }

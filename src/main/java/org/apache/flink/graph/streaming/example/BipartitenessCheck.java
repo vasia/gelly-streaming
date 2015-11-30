@@ -16,15 +16,15 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.bipartiteness;
+package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.ProgramDescription;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
-import org.apache.flink.graph.streaming.example.bipartiteness.util.Candidate;
-import org.apache.flink.graph.streaming.example.bipartiteness.util.SignedVertex;
+import org.apache.flink.graph.streaming.example.util.Candidate;
+import org.apache.flink.graph.streaming.example.util.SignedVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;

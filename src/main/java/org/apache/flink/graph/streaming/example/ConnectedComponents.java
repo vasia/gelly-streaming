@@ -39,7 +39,6 @@ import org.apache.flink.util.Collector;
  */
 public class ConnectedComponents implements ProgramDescription {
 
-	@SuppressWarnings("serial")
 	public static void main(String[] args) throws Exception {
 
 		// Set up the environment
@@ -51,16 +50,8 @@ public class ConnectedComponents implements ProgramDescription {
 		env.setParallelism(4); // for easier testing
 
 		DataStream<Tuple2<Long, Long>> edges = getEdgesDataSet(env);
-		DataStream<Tuple2<Long, Long>> undirectedStream = edges
-				.flatMap(new FlatMapFunction<Tuple2<Long, Long>, Tuple2<Long,Long>>() {
 
-					public void flatMap(Tuple2<Long, Long> edge, Collector<Tuple2<Long, Long>> out) {
-						out.collect(edge);
-						out.collect(edge.swap());
-					}
-				});
-
-		IterativeStream<Tuple2<Long, Long>> iteration = undirectedStream.iterate();
+		IterativeStream<Tuple2<Long, Long>> iteration = edges.iterate();
 		DataStream<Tuple2<Long, Long>> result = iteration.closeWith(
 				iteration.partitionByHash(0).flatMap(new AssignComponents()));
 
@@ -132,13 +123,13 @@ public class ConnectedComponents implements ProgramDescription {
 
 		private void addToExistingComponent(long componentId, long toAdd, Collector<Tuple2<Long, Long>> out) {
 			HashSet<Long> vertices = components.remove(componentId);
-			vertices.add(toAdd);
 			if (componentId >= toAdd) {
-				// update component ID
-				components.put(toAdd, vertices);
+				// output and update component ID
 				for (long v: vertices) {
 					out.collect(new Tuple2<Long, Long>(v, toAdd));
 				}
+				vertices.add(toAdd);
+				components.put(toAdd, vertices);
 			}
 			else {
 				components.put(componentId, vertices);

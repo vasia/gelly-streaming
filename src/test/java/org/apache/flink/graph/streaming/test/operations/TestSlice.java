@@ -1,0 +1,123 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.flink.graph.streaming.test.operations;
+
+import java.util.concurrent.TimeUnit;
+
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.core.fs.FileSystem;
+import org.apache.flink.graph.EdgeDirection;
+import org.apache.flink.graph.streaming.EdgesFold;
+import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.junit.Rule;
+import org.junit.rules.TemporaryFolder;
+
+public class TestSlice extends StreamingProgramTestBase {
+
+	private String resultPath;
+	private String expectedResult;
+
+	@Rule
+	public TemporaryFolder tempFolder = new TemporaryFolder();
+
+	@Override
+	protected void preSubmit() throws Exception {
+		resultPath = tempFolder.newFile().toURI().toString();
+	}
+
+	@Override
+	protected void postSubmit() throws Exception {
+		compareResultsByLinesInMemory(expectedResult, resultPath);
+	}
+
+	@Override
+	public void testProgram() throws Exception {
+		testReduceOnNeighborsDefault();
+		testReduceOnNeighborsIn();
+	}
+
+	public void testReduceOnNeighborsDefault() throws Exception {
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+
+		DataStream<Tuple2<Long, Long>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS))
+			.reduceOnNeighbors(new Tuple2<Long, Long>(0l, 0l), new SumEdgeValues());
+
+		sum.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,25\n" +
+				"2,23\n" +
+				"3,69\n" +
+				"4,45\n" +
+				"5,51\n";
+	}
+
+	public void testReduceOnNeighborsIn() throws Exception {
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+
+		DataStream<Tuple2<Long, Long>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS), EdgeDirection.IN)
+			.reduceOnNeighbors(new Tuple2<Long, Long>(0l, 0l), new SumEdgeValues());
+
+		sum.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,51\n" +
+				"2,12\n" +
+				"3,36\n" +
+				"4,34\n" +
+				"5,80\n";
+	}
+
+	public void testReduceOnNeighborsAll() throws Exception {
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+
+		DataStream<Tuple2<Long, Long>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS), EdgeDirection.ALL)
+			.reduceOnNeighbors(new Tuple2<Long, Long>(0l, 0l), new SumEdgeValues());
+
+		sum.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,76\n" +
+				"2,35\n" +
+				"3,105\n" +
+				"4,79\n" +
+				"5,131\n";
+	}
+
+	@SuppressWarnings("serial")
+	private static final class SumEdgeValues implements EdgesFold<Long, Long, Tuple2<Long, Long>>{
+
+		public Tuple2<Long, Long> reduceEdges(Tuple2<Long, Long> accum, Long id, Long neighborID, Long edgeValue) {
+			accum.setField(id, 0);
+			accum.setField(accum.f1 + edgeValue, 1);
+			return accum;
+		}
+	}
+}

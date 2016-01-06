@@ -29,15 +29,14 @@ import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.EdgeDirection;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.RichAllWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.GlobalWindows;
+import org.apache.flink.streaming.api.windowing.time.AbstractTime;
 import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.api.windowing.triggers.Trigger;
-import org.apache.flink.streaming.api.windowing.windows.GlobalWindow;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.types.NullValue;
@@ -57,6 +56,7 @@ import java.util.Set;
  * @param <K> the key type for edge and vertex identifiers.
  * @param <EV> the value type for edges.
  */
+@SuppressWarnings("serial")
 public class GraphStream<K, EV> {
 
 	private final StreamExecutionEnvironment context;
@@ -85,9 +85,67 @@ public class GraphStream<K, EV> {
 	 */
 	public DataStream<Vertex<K, NullValue>> getVertices() {
 		return this.edges
-				.flatMap(new EmitSrcAndTarget<K, EV>())
-				.keyBy(0)
-				.filter(new FilterDistinctVertices<K>());
+			.flatMap(new EmitSrcAndTarget<K, EV>())
+			.keyBy(0)
+			.filter(new FilterDistinctVertices<K>());
+	}
+
+	/**
+	 * Discretizes the edge stream into tumbling windows of the specified size.
+	 * <p>
+	 * The edge stream is partitioned so that all neighbors of a vertex belong to the same partition.
+	 * The KeyedStream is then windowed into tumbling time windows.
+	 * <p>
+	 * By default, each vertex is grouped with its outgoing edges.
+	 * Use {@link #slice(AbstractTime, EdgeDirection)} to manually set the edge direction grouping.
+	 * 
+	 * @param size the size of the window
+	 * @return a GraphWindowStream of the specified size 
+	 */
+	public GraphWindowStream<K, EV> slice(AbstractTime size) {
+		return slice(size, EdgeDirection.OUT);
+	}
+
+	/**
+	 * Discretizes the edge stream into tumbling windows of the specified size.
+	 * <p>
+	 * The edge stream is partitioned so that all neighbors of a vertex belong to the same partition.
+	 * The KeyedStream is then windowed into tumbling time windows.
+	 * 
+	 * @param size the size of the window
+	 * @param direction the EdgeDirection to key by
+	 * @return a GraphWindowStream of the specified size, keyed by
+	 */
+	public GraphWindowStream<K, EV> slice(AbstractTime size, EdgeDirection direction)
+		throws IllegalArgumentException {
+
+		switch (direction) {
+		case IN:
+			return new GraphWindowStream<K, EV>(
+				this.reverse().getEdges().keyBy(new NeighborKeySelector<K, EV>(0)).timeWindow(size));
+		case OUT:
+			return new GraphWindowStream<K, EV>(
+				getEdges().keyBy(new NeighborKeySelector<K, EV>(0)).timeWindow(size));
+		case ALL:
+			getEdges().keyBy(0).timeWindow(size);
+			return new GraphWindowStream<K, EV>(
+				this.undirected().getEdges().keyBy(
+					new NeighborKeySelector<K, EV>(0)).timeWindow(size));
+		default:
+			throw new IllegalArgumentException("Illegal edge direction");
+		}
+	}
+
+	private static final class NeighborKeySelector<K, EV> implements KeySelector<Edge<K, EV>, K> {
+		private final int key;
+
+		public NeighborKeySelector(int k) {
+			this.key = k;
+		}
+
+		public K getKey(Edge<K, EV> edge) throws Exception {
+			return edge.getField(key);
+		}
 	}
 
 	private static final class EmitSrcAndTarget<K, EV>
@@ -152,7 +210,7 @@ public class GraphStream<K, EV> {
 		public TypeInformation<Edge<K, NV>> getProducedType() {
 			TypeInformation<NV> valueType = TypeExtractor
 					.createTypeInfo(MapFunction.class, innerMapper.getClass(), 1, null, null);
-			@SuppressWarnings("rawtypes")
+
 			TypeInformation<?> returnType = new TupleTypeInfo<>(Edge.class, keyType, keyType, valueType);
 			return (TypeInformation<Edge<K, NV>>) returnType;
 		}

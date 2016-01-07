@@ -20,9 +20,10 @@ package org.apache.flink.graph.streaming.example.util;
 
 import org.apache.flink.api.java.tuple.Tuple2;
 
+import java.io.Serializable;
 import java.util.*;
 
-public class Candidates extends Tuple2<Boolean, TreeMap<Long, Map<Long, SignedVertex>>> {
+public class Candidates extends Tuple2<Boolean, TreeMap<Long, Map<Long, SignedVertex>>> implements Serializable{
 
 	public Candidates() {}
 

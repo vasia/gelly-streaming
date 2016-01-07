@@ -42,6 +42,7 @@ import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -81,7 +82,7 @@ public class GraphStream<K, EV> {
 	 * @param <T>
      * @return
      */
-	public  <S,T> DataStream<T> aggregate(GraphAggregation<K,EV,S,T> graphAggregation){
+	public  <S extends Serializable,T> DataStream<T> aggregate(GraphAggregation<K,EV,S,T> graphAggregation){
 		return graphAggregation.run(getEdges());//FIXME
 	}
 	

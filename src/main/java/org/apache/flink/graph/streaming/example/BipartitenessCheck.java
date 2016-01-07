@@ -70,7 +70,7 @@ public class BipartitenessCheck implements ProgramDescription {
 			}
 		};
 		
-		DataStream bipartition = graph.aggregate(new WindowGraphAggregation<>(updFun, combineFun, new Candidates(true), 500, false));
+		DataStream<Candidates> bipartition = graph.aggregate(new WindowGraphAggregation<Long,NullValue, Candidates, Candidates>(updFun, combineFun, new Candidates(true), 500, false));
 		
 		// Emit the results
 		if (fileOutput) {

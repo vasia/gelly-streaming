@@ -74,6 +74,18 @@ public class GraphStream<K, EV> {
 	}
 
 	/**
+	 * Applies an incremental aggregation on a graphstream and returns a stream of aggregation results 
+	 * 
+	 * @param graphAggregation
+	 * @param <S>
+	 * @param <T>
+     * @return
+     */
+	public  <S,T> DataStream<T> aggregate(GraphAggregation<K,EV,S,T> graphAggregation){
+		return graphAggregation.run(getEdges());//FIXME
+	}
+	
+	/**
 	 * @return the flink streaming execution environment.
 	 */
 	public StreamExecutionEnvironment getContext() {

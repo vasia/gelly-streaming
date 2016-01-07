@@ -23,7 +23,7 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
-import org.apache.flink.graph.streaming.example.util.Candidate;
+import org.apache.flink.graph.streaming.example.util.Candidates;
 import org.apache.flink.graph.streaming.example.util.SignedVertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -55,7 +55,7 @@ public class BipartitenessCheck implements ProgramDescription {
 
 		// Process bipartiteness
 		GraphStream<Long, NullValue> graph = new GraphStream<>(edges, env);
-		DataStream<Candidate> bipartition = graph.mergeTree(new InitCandidateMapper(),
+		DataStream<Candidates> bipartition = graph.mergeTree(new InitCandidateMapper(),
 				new BipartitenessMapper(), 1000l);
 
 		// Emit the results
@@ -73,11 +73,11 @@ public class BipartitenessCheck implements ProgramDescription {
 	// *************************************************************************
 
 
-	private static final class BipartitenessMapper implements MapFunction<Candidate, Candidate> {
-		private Candidate candidate = null;
+	private static final class BipartitenessMapper implements MapFunction<Candidates, Candidates> {
+		private Candidates candidates = null;
 		private boolean failed = false;
 
-		public Candidate map(Candidate input) throws Exception {
+		public Candidates map(Candidates input) throws Exception {
 
 			// Propagate failure
 			if (!input.getSuccess() || failed) {
@@ -85,9 +85,9 @@ public class BipartitenessCheck implements ProgramDescription {
 			}
 
 			// Store and forward the first candidate
-			if (candidate == null) {
-				candidate = new Candidate(true, input);
-				return candidate;
+			if (candidates == null) {
+				candidates = new Candidates(true, input);
+				return candidates;
 			}
 
 			// Compare each input component with each candidate component and merge accordingly
@@ -95,7 +95,7 @@ public class BipartitenessCheck implements ProgramDescription {
 
 				List<Long> mergeWith = new ArrayList<>();
 
-				for (Map.Entry<Long, Map<Long, SignedVertex>> selfEntry : candidate.getMap().entrySet()) {
+				for (Map.Entry<Long, Map<Long, SignedVertex>> selfEntry : candidates.getMap().entrySet()) {
 					long selfKey = selfEntry.getKey();
 
 					// If the two components are exactly the same, skip them
@@ -118,7 +118,7 @@ public class BipartitenessCheck implements ProgramDescription {
 				if (mergeWith.isEmpty()) {
 					// If the input component is disjoint from all components of the candidate,
 					// simply add that component
-					candidate.add(inEntry.getKey(), inEntry.getValue());
+					candidates.add(inEntry.getKey(), inEntry.getValue());
 				} else {
 					// Merge the input with the lowest id component in candidate
 					Collections.sort(mergeWith);
@@ -135,22 +135,22 @@ public class BipartitenessCheck implements ProgramDescription {
 					// Merge other components of candidate into the lowest id component
 					for (int i = 1; i < mergeWith.size(); ++i) {
 
-						success = merge(candidate, mergeWith.get(i), firstKey);
+						success = merge(candidates, mergeWith.get(i), firstKey);
 						if (!success) {
 							fail();
 						}
 
-						candidate.getMap().remove(mergeWith.get(i));
+						candidates.getMap().remove(mergeWith.get(i));
 					}
 				}
 			}
 
-			return candidate;
+			return candidates;
 		}
 
-		private boolean merge(Candidate input, long inputKey, long selfKey) throws Exception {
+		private boolean merge(Candidates input, long inputKey, long selfKey) throws Exception {
 			Map<Long, SignedVertex> inputComponent = input.getMap().get(inputKey);
-			Map<Long, SignedVertex> selfComponent = candidate.getMap().get(selfKey);
+			Map<Long, SignedVertex> selfComponent = candidates.getMap().get(selfKey);
 
 			// Find the vertices to merge along
 			List<Long> mergeBy = new ArrayList<>();
@@ -188,9 +188,9 @@ public class BipartitenessCheck implements ProgramDescription {
 			for (SignedVertex inputVertex : inputComponent.values()) {
 
 				if (reversed) {
-					success = candidate.add(commonKey, inputVertex.reverse());
+					success = candidates.add(commonKey, inputVertex.reverse());
 				} else {
-					success = candidate.add(commonKey, inputVertex);
+					success = candidates.add(commonKey, inputVertex);
 				}
 				if (!success) {
 					return false;
@@ -200,25 +200,25 @@ public class BipartitenessCheck implements ProgramDescription {
 			return true;
 		}
 
-		private Candidate fail() {
+		private Candidates fail() {
 			failed = true;
-			return new Candidate(false);
+			return new Candidates(false);
 		}
 	}
 
 	private static final class InitCandidateMapper implements
-			FlatMapFunction<Edge<Long,NullValue>, Candidate> {
+			FlatMapFunction<Edge<Long,NullValue>, Candidates> {
 
 		@Override
-		public void flatMap(Edge<Long, NullValue> edge, Collector<Candidate> out) throws Exception {
+		public void flatMap(Edge<Long, NullValue> edge, Collector<Candidates> out) throws Exception {
 			long src = Math.min(edge.getSource(), edge.getTarget());
 			long trg = Math.max(edge.getSource(), edge.getTarget());
 
-			Candidate candidate = new Candidate(true);
-			candidate.add(src, new SignedVertex(src, true));
-			candidate.add(src, new SignedVertex(trg, false));
+			Candidates candidates = new Candidates(true);
+			candidates.add(src, new SignedVertex(src, true));
+			candidates.add(src, new SignedVertex(trg, false));
 
-			out.collect(candidate);
+			out.collect(candidates);
 		}
 	}
 

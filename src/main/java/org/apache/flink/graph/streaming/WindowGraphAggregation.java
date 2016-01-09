@@ -28,7 +28,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends GraphAggregation<K, EV, S, T> {
 
-    private long timeMillis;
+	private static final long serialVersionUID = 1L;
+	private long timeMillis;
 
 
     public WindowGraphAggregation(FoldFunction<Edge<K, EV>, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> mergeFun, S initialVal, long timeMillis, boolean transientState) {
@@ -40,7 +41,8 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
         this(updateFun, combineFun, null, initialVal, timeMillis, transientState);
     }
 
-    @Override
+    @SuppressWarnings("unchecked")
+	@Override
     public DataStream<T> run(final DataStream<Edge<K, EV>> edgeStream) {
 
         //For parallel window support we key the edge stream by partition and apply a parallel fold per partition.
@@ -49,10 +51,10 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 
         TypeInformation<Tuple2<Integer, Edge<K, EV>>> typeInfo = new TupleTypeInfo<>(BasicTypeInfo.INT_TYPE_INFO, edgeStream.getType());
         DataStream<S> partialAgg = edgeStream
-                .map(new InitialMapper()).returns(typeInfo)
+                .map(new InitialMapper<K, EV>()).returns(typeInfo)
                 .keyBy(0)
                 .timeWindow(Time.of(timeMillis, TimeUnit.MILLISECONDS))
-                .fold(getInitialValue(), new PartialAgg(getUpdateFun())).flatMap(getAggregator(edgeStream)).setParallelism(1);
+                .fold(getInitialValue(), new PartialAgg<K, EV, S>(getUpdateFun())).flatMap(getAggregator(edgeStream)).setParallelism(1);
 
         if (getMergeFun() != null) {
             return partialAgg.map(getMergeFun());
@@ -62,14 +64,16 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
     }
 
 
-    private static final class InitialMapper<K, EV> extends RichMapFunction<Edge<K, EV>, Tuple2<Integer, Edge<K, EV>>> {
+    @SuppressWarnings("serial")
+	private static final class InitialMapper<K, EV> extends RichMapFunction<Edge<K, EV>, Tuple2<Integer, Edge<K, EV>>> {
         @Override
         public Tuple2<Integer, Edge<K, EV>> map(Edge<K, EV> edge) throws Exception {
             return new Tuple2<>(getRuntimeContext().getIndexOfThisSubtask(), edge);
         }
     }
 
-    private static final class PartialAgg<K, EV, S> implements FoldFunction<Tuple2<Integer, Edge<K, EV>>, S>, ResultTypeQueryable<S> {
+    @SuppressWarnings("serial")
+	private static final class PartialAgg<K, EV, S> implements FoldFunction<Tuple2<Integer, Edge<K, EV>>, S>, ResultTypeQueryable<S> {
 
         private final FoldFunction<Edge<K, EV>, S> foldFunction;
 

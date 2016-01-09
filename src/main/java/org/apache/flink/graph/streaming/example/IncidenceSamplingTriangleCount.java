@@ -57,6 +57,7 @@ public class IncidenceSamplingTriangleCount implements ProgramDescription {
 	//     TRIANGLE COUNT FUNCTIONS
 	// *************************************************************************
 
+	@SuppressWarnings("serial")
 	private static final class EdgeSampleMapper extends RichFlatMapFunction<Edge<Long, NullValue>, SampledEdge> {
 		private final int instanceSize, p;
 		private final List<Random> randoms;
@@ -120,6 +121,7 @@ public class IncidenceSamplingTriangleCount implements ProgramDescription {
 		}
 	}
 
+	@SuppressWarnings("serial")
 	private static final class TriangleSampleMapper extends RichFlatMapFunction<SampledEdge, TriangleEstimate> {
 		private List<SampleTriangleState> states;
 		private int edgeCount;
@@ -200,6 +202,7 @@ public class IncidenceSamplingTriangleCount implements ProgramDescription {
 		}
 	}
 
+	@SuppressWarnings("serial")
 	private static final class TriangleSummer
 			implements FlatMapFunction<TriangleEstimate, Tuple2<Integer, Integer>> {
 		private Map<Integer, TriangleEstimate> results;
@@ -238,6 +241,7 @@ public class IncidenceSamplingTriangleCount implements ProgramDescription {
 		}
 	}
 
+	@SuppressWarnings("serial")
 	private static final class SampleTriangleState implements Serializable {
 		public long beta;
 

@@ -25,6 +25,7 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
 import org.apache.flink.graph.streaming.example.util.Candidates;
 import org.apache.flink.graph.streaming.example.util.SignedVertex;
@@ -32,11 +33,6 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
-
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
 
 /**
  * The bipartiteness check example tests whether an input graph is bipartite
@@ -46,6 +42,7 @@ import java.util.Map;
  */
 public class BipartitenessCheck implements ProgramDescription {
 
+	@SuppressWarnings("serial")
 	public static void main(String[] args) throws Exception {
 
 		// Set up the environment
@@ -54,7 +51,7 @@ public class BipartitenessCheck implements ProgramDescription {
 		}
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		GraphStream<Long, NullValue> graph = new GraphStream<>(getEdgesDataSet(env), env);
+		GraphStream<Long, NullValue, NullValue> graph = new SimpleEdgeStream<>(getEdgesDataSet(env), env);
 		
 		FoldFunction<Edge<Long, NullValue>, Candidates> updFun = new FoldFunction<Edge<Long, NullValue>, Candidates>() {
 			@Override

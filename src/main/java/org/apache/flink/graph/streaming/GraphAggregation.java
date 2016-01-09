@@ -4,9 +4,6 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
-import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.util.Collector;
@@ -21,7 +18,9 @@ import java.io.Serializable;
  */
 public abstract class GraphAggregation<K, EV, S extends Serializable, T> implements Serializable {
 
-    /**
+	private static final long serialVersionUID = 1L;
+
+	/**
      * A function applied to each edge in an edge stream that aggregates a user-defined graph property state. In case
      * we slice the edge stream into windows a fold will output its aggregation state value per window, otherwise, this
      * operates edge-wise
@@ -53,7 +52,6 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
         this.transientState = transientState;
     }
 
-
     public abstract DataStream<T> run(DataStream<Edge<K, EV>> edgeStream);
 
 
@@ -82,7 +80,8 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
         return new Merger<>(edgeStream.getParallelism(),initialValue,combineFun,transientState);
     }
     
-    private final static class Merger<S> implements FlatMapFunction<S, S>{
+    @SuppressWarnings("serial")
+	private final static class Merger<S> implements FlatMapFunction<S, S>{
 
         private final int numTasks;
         private final S initialVal;

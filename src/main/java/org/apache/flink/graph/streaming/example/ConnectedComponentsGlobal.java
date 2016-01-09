@@ -23,6 +23,7 @@ import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
 import org.apache.flink.graph.streaming.example.util.DisjointSet;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -46,7 +47,7 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.setParallelism(4);
 
-        GraphStream<Long, NullValue> edges = getEdgesDataSet(env);
+        GraphStream<Long, NullValue, NullValue> edges = getEdgesDataSet(env);
         DataStream<DisjointSet<Long>> cc = edges.aggregate(
                 new WindowGraphAggregation<Long, NullValue, DisjointSet<Long>, DisjointSet<Long>>(
                         new UpdateCC(), new CombineCC(), new DisjointSet<Long>(), 500, false));
@@ -56,7 +57,8 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
     }
 
 
-    public static class UpdateCC implements FoldFunction<Edge<Long, NullValue>, DisjointSet<Long>> {
+    @SuppressWarnings("serial")
+	public static class UpdateCC implements FoldFunction<Edge<Long, NullValue>, DisjointSet<Long>> {
 
         @Override
         public DisjointSet<Long> fold(DisjointSet<Long> longDisjointSet, Edge<Long, NullValue> o) throws Exception {
@@ -65,7 +67,8 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
         }
     }
 
-    private static class CombineCC implements ReduceFunction<DisjointSet<Long>> {
+    @SuppressWarnings("serial")
+	private static class CombineCC implements ReduceFunction<DisjointSet<Long>> {
         @Override
         public DisjointSet<Long> reduce(DisjointSet<Long> s1, DisjointSet<Long> s2) throws Exception {
             int count1 = s1.getMatches().size();
@@ -80,7 +83,8 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
         }
     }
     
-    private static class FlattenCC implements FlatMapFunction<DisjointSet<Long>, Tuple2<Long, Long>>{
+    @SuppressWarnings("serial")
+	private static class FlattenCC implements FlatMapFunction<DisjointSet<Long>, Tuple2<Long, Long>>{
 
         @Override
         public void flatMap(DisjointSet<Long> components, Collector<Tuple2<Long, Long>> collector) throws Exception {
@@ -116,10 +120,11 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
         return true;
     }
 
-    private static GraphStream<Long, NullValue> getEdgesDataSet(StreamExecutionEnvironment env) {
+    @SuppressWarnings("serial")
+	private static GraphStream<Long, NullValue, NullValue> getEdgesDataSet(StreamExecutionEnvironment env) {
 
         if (fileOutput) {
-            return new GraphStream<>(env.readTextFile(edgeInputPath)
+            return new SimpleEdgeStream<>(env.readTextFile(edgeInputPath)
                     .map(new MapFunction<String, Edge<Long, NullValue>>() {
                         @Override
                         public Edge<Long, NullValue> map(String s) {
@@ -131,7 +136,7 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
                     }), env);
         }
 
-        return new GraphStream<>(env.generateSequence(1, 10).flatMap(
+        return new SimpleEdgeStream<>(env.generateSequence(1, 10).flatMap(
                 new FlatMapFunction<Long, Edge<Long, NullValue>>() {
                     @Override
                     public void flatMap(Long key, Collector<Edge<Long, NullValue>> out) throws Exception {

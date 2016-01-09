@@ -23,9 +23,11 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.example.util.MatchingEvent;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
 import java.util.HashSet;
@@ -37,6 +39,7 @@ public class CentralizedWeightedMatching {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createLocalEnvironment();
 
 		// Source: http://grouplens.org/datasets/movielens/
+		@SuppressWarnings("serial")
 		DataStream<Edge<Long, Long>> edges = env
 				.readTextFile("movielens_10k_sorted.txt")
 				.map(new MapFunction<String, Edge<Long, Long>>() {
@@ -50,7 +53,7 @@ public class CentralizedWeightedMatching {
 					}
 				});
 
-		GraphStream<Long, Long> graph = new GraphStream<>(edges, env);
+		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(edges, env);
 
 		graph.getEdges()
 				.flatMap(new WeightedMatchingFlatMapper()).setParallelism(1)
@@ -61,7 +64,8 @@ public class CentralizedWeightedMatching {
 		System.out.println("Runtime: " + runtime);
 	}
 
-	private static final class WeightedMatchingFlatMapper
+	@SuppressWarnings("serial")
+	private static final class WeightedMatchingFlatMapper 
 			implements FlatMapFunction<Edge<Long,Long>, MatchingEvent> {
 		private Set<Edge<Long, Long>> localMatching;
 

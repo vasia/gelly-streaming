@@ -23,9 +23,11 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.types.NullValue;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 
@@ -60,7 +62,7 @@ public class TestMapEdges extends StreamingProgramTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph = graph.mapEdges(new AddOneMapper());
 
@@ -88,9 +90,9 @@ public class TestMapEdges extends StreamingProgramTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
-		GraphStream<Long, Tuple2<Long, Long>> mappedGraph = graph.mapEdges(new ToTuple2Mapper());
+		GraphStream<Long, NullValue, Tuple2<Long, Long>> mappedGraph = graph.mapEdges(new ToTuple2Mapper());
 
 		mappedGraph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
@@ -116,9 +118,9 @@ public class TestMapEdges extends StreamingProgramTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
-		GraphStream<Long, Tuple2<Long, Long>> mappedGraph = graph
+		GraphStream<Long, NullValue, Tuple2<Long, Long>> mappedGraph = graph
 				.mapEdges(new AddOneMapper())
 				.mapEdges(new ToTuple2Mapper());
 

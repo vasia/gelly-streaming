@@ -20,9 +20,11 @@ package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.types.NullValue;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 
@@ -52,8 +54,7 @@ public class TestUndirected extends StreamingProgramTestBase {
 	     */
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph =
-				new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		graph.undirected().getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 

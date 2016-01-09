@@ -121,7 +121,12 @@ public abstract class GraphStream<K, VV, EV> {
 	/**
 	 * @return a graph stream where edges are undirected
 	 */
-	public abstract SimpleEdgeStream<K, EV> undirected();
+	public abstract GraphStream<K, VV, EV> undirected();
+
+	/**
+	 * @return a graph stream with the edge directions reversed
+	 */
+	public abstract GraphStream<K, VV, EV> reverse();
 
 	/**
 	 * Applies an incremental aggregation on a graphstream and returns a stream of aggregation results 

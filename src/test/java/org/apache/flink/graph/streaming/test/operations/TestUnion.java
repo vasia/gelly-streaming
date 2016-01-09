@@ -21,8 +21,10 @@ package org.apache.flink.graph.streaming.test.operations;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.types.NullValue;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 
@@ -65,13 +67,11 @@ public class TestUnion extends StreamingProgramTestBase {
 		edgesB.add(new Edge<>(4L, 5L, 45L));
 		edgesB.add(new Edge<>(5L, 1L, 51L));
 
-		GraphStream<Long, Long> graphA =
-				new GraphStream<>(env.fromCollection(edgesA), env);
+		SimpleEdgeStream<Long, Long> graphA = new SimpleEdgeStream<>(env.fromCollection(edgesA), env);
 
-		GraphStream<Long, Long> graphB =
-				new GraphStream<>(env.fromCollection(edgesB), env);
+		SimpleEdgeStream<Long, Long> graphB = new SimpleEdgeStream<>(env.fromCollection(edgesB), env);
 
-		GraphStream<Long, Long> graph = graphA.union(graphB);
+		GraphStream<Long, NullValue, Long> graph = graphA.union(graphB);
 
 		graph.getEdges()
 				.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);

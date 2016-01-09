@@ -25,7 +25,7 @@ import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.EdgeDirection;
 import org.apache.flink.graph.streaming.EdgesFold;
 import org.apache.flink.graph.streaming.EdgesReduce;
-import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -66,7 +66,7 @@ public class TestSlice extends StreamingProgramTestBase {
 
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		SimpleEdgeStream<Long, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		DataStream<Tuple2<Long, Long>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS))
 			.foldNeighbors(new Tuple2<Long, Long>(0l, 0l), new SumEdgeValues());
@@ -84,7 +84,7 @@ public class TestSlice extends StreamingProgramTestBase {
 
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		SimpleEdgeStream<Long, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		DataStream<Tuple2<Long, Long>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS), EdgeDirection.IN)
 			.foldNeighbors(new Tuple2<Long, Long>(0l, 0l), new SumEdgeValues());
@@ -102,7 +102,7 @@ public class TestSlice extends StreamingProgramTestBase {
 
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		SimpleEdgeStream<Long, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		DataStream<Tuple2<Long, Long>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS), EdgeDirection.ALL)
 			.foldNeighbors(new Tuple2<Long, Long>(0l, 0l), new SumEdgeValues());
@@ -120,7 +120,7 @@ public class TestSlice extends StreamingProgramTestBase {
 
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		SimpleEdgeStream<Long, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		DataStream<Tuple2<Long, Long>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS))
 			.reduceOnEdges(new SumEdgeValuesReduce());
@@ -138,7 +138,7 @@ public class TestSlice extends StreamingProgramTestBase {
 
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		SimpleEdgeStream<Long, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		DataStream<Tuple2<Long, Long>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS), EdgeDirection.IN)
 				.reduceOnEdges(new SumEdgeValuesReduce());
@@ -156,7 +156,7 @@ public class TestSlice extends StreamingProgramTestBase {
 
 		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, Long> graph = new GraphStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+		SimpleEdgeStream<Long, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		DataStream<Tuple2<Long, Long>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS), EdgeDirection.ALL)
 				.reduceOnEdges(new SumEdgeValuesReduce());

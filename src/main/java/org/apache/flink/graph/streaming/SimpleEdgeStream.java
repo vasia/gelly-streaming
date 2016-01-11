@@ -33,6 +33,7 @@ import org.apache.flink.graph.EdgeDirection;
 import org.apache.flink.graph.Vertex;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.TimestampExtractor;
 import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.RichAllWindowFunction;
 import org.apache.flink.streaming.api.windowing.time.AbstractTime;
@@ -74,6 +75,17 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 */
 	public SimpleEdgeStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context) {
 		this.edges = edges;
+		this.context = context;
+	}
+
+	/**
+	 * Creates a graph from an edge stream operating in event time specified by timeExtractor 
+	 * @param edges
+	 * @param timeExtractor
+	 * @param context
+     */
+	public SimpleEdgeStream(DataStream<Edge<K, EV>> edges, TimestampExtractor<Edge<K,EV>> timeExtractor, StreamExecutionEnvironment context) {
+		this.edges = edges.assignTimestamps(timeExtractor);
 		this.context = context;
 	}
 

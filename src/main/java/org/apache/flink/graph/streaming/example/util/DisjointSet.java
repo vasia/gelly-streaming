@@ -19,9 +19,11 @@
 package org.apache.flink.graph.streaming.example.util;
 
 import org.apache.commons.collections.map.HashedMap;
+import org.apache.flink.hadoop.shaded.com.google.common.collect.Lists;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -29,7 +31,7 @@ import java.util.Set;
 public class DisjointSet<R extends Serializable> implements Serializable {
 
     private Map<R, R> matches = new HashedMap();
-    private Map<R, Integer> dists = new HashMap<>();
+    private Map<R, Integer> ranks = new HashMap<>();
 
     public DisjointSet() {
     }
@@ -37,7 +39,7 @@ public class DisjointSet<R extends Serializable> implements Serializable {
     public DisjointSet(Set<R> elements) {
         for (R element : elements) {
             matches.put(element, element);
-            dists.put(element, 0);
+            ranks.put(element, 0);
         }
     }
 
@@ -52,7 +54,7 @@ public class DisjointSet<R extends Serializable> implements Serializable {
      */
     public void makeSet(R e) {
         matches.put(e, e);
-        dists.put(e, 0);
+        ranks.put(e, 0);
     }
 
     /**
@@ -105,15 +107,15 @@ public class DisjointSet<R extends Serializable> implements Serializable {
             return;
         }
 
-        int dist1 = dists.get(root1);
-        int dist2 = dists.get(root2);
+        int dist1 = ranks.get(root1);
+        int dist2 = ranks.get(root2);
         if (dist1 > dist2) {
             matches.put(root2, root1);
         } else if (dist1 < dist2) {
             matches.put(root1, root2);
         } else {
             matches.put(root2, root1);
-            dists.put(root1, dist1 + 1);
+            ranks.put(root1, dist1 + 1);
         }
     }
 
@@ -128,6 +130,23 @@ public class DisjointSet<R extends Serializable> implements Serializable {
         for (Map.Entry<R, R> entry : other.getMatches().entrySet()) {
             union(entry.getKey(), entry.getValue());
         }
+    }
+
+    @Override
+    public String toString() {
+        Map<R, List<R>> comps = new HashMap<>();
+
+        for (R vertex : getMatches().keySet()) {
+            R parent = find(vertex);
+            if (!comps.containsKey(parent)) {
+                comps.put(parent, Lists.newArrayList(vertex));
+            } else {
+                List cc = comps.get(parent);
+                cc.add(vertex);
+                comps.put(parent, cc);
+            }
+        }
+        return comps.toString();
     }
 }
 

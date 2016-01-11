@@ -4,6 +4,7 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.java.operators.translation.WrappingFunction;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.util.Collector;
@@ -52,6 +53,7 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
         this.transientState = transientState;
     }
 
+
     public abstract DataStream<T> run(DataStream<Edge<K, EV>> edgeStream);
 
 
@@ -77,39 +79,34 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
 
     //FIXME - naive prototype - blocking reduce should be implemented correctly
     protected FlatMapFunction<S, S> getAggregator(final DataStream<Edge<K, EV>> edgeStream) {
-        return new Merger<>(edgeStream.getParallelism(),initialValue,combineFun,transientState);
+        return new Merger<>(getInitialValue(), getCombineFun(), isTransientState());
     }
-    
+
+    /**
+     * In this prototype the Merger is non-blocking and merges partitions incrementally
+     *
+     * @param <S>
+     */
     @SuppressWarnings("serial")
-	private final static class Merger<S> implements FlatMapFunction<S, S>{
+	private final static class Merger<S> extends WrappingFunction<ReduceFunction<S>> implements FlatMapFunction<S, S> {
 
-        private final int numTasks;
         private final S initialVal;
-        private final ReduceFunction<S> combiner;
-
-        private  S currentState;
-        private int toAggregate;
+        private S currentState;
         private final boolean transientState;
 
-        private Merger(int numTasks, S initialVal, ReduceFunction<S> combiner, boolean transientState) {
-            this.numTasks = numTasks;
+        private Merger(S initialVal, ReduceFunction<S> combiner, boolean transientState) {
+            super(combiner);
             this.initialVal = initialVal;
             this.currentState = initialVal;
-            this.combiner = combiner;
-            this.toAggregate = numTasks;
             this.transientState = transientState;
         }
 
         @Override
         public void flatMap(S s, Collector<S> collector) throws Exception {
-            if (combiner != null) {
-                currentState = combiner.reduce(currentState, s);
-                toAggregate--;
 
-                if (toAggregate == 0) {
-                    collector.collect(currentState);
-                    toAggregate = numTasks;
-                }
+            if (getWrappedFunction() != null) {
+                currentState = getWrappedFunction().reduce(s, currentState);
+                collector.collect(currentState);
 
                 if (transientState) {
                     currentState = initialVal;

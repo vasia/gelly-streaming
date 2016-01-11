@@ -19,15 +19,20 @@
 package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.ProgramDescription;
-import org.apache.flink.api.common.functions.*;
+import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.functions.RichFoldFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
 import org.apache.flink.graph.streaming.example.util.DisjointSet;
+import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
@@ -40,112 +45,72 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
 
     public static void main(String[] args) throws Exception {
 
-        if (!parseParameters(args)) {
-            return;
-        }
-
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
         env.setParallelism(4);
 
-        GraphStream<Long, NullValue, NullValue> edges = getEdgesDataSet(env);
-        DataStream<DisjointSet<Long>> cc = edges.aggregate(
-                new WindowGraphAggregation<Long, NullValue, DisjointSet<Long>, DisjointSet<Long>>(
-                        new UpdateCC(), new CombineCC(), new DisjointSet<Long>(), 500, false));
+        GraphStream<Long, NullValue, Long> edges = getTestGraphStream(env);
 
-        cc.flatMap(new FlattenCC()).print();
+        DataStream<Tuple2<Integer, DisjointSet<Long>>> cc = edges.aggregate(
+                new WindowGraphAggregation<Long, Long, Tuple2<Integer, DisjointSet<Long>>, Tuple2<Integer, DisjointSet<Long>>>(
+                        new UpdateCC(), new CombineCC(), new Tuple2<>(-1, new DisjointSet<Long>()), 500, false));
+        cc.print().setParallelism(1);
         env.execute("Streaming Connected Components");
     }
 
-
     @SuppressWarnings("serial")
-	public static class UpdateCC implements FoldFunction<Edge<Long, NullValue>, DisjointSet<Long>> {
+    public static class UpdateCC extends RichFoldFunction<Edge<Long, Long>, Tuple2<Integer, DisjointSet<Long>>> {
+
+        int subtaskId;
 
         @Override
-        public DisjointSet<Long> fold(DisjointSet<Long> longDisjointSet, Edge<Long, NullValue> o) throws Exception {
-            longDisjointSet.union(o.f0, o.f1);
-            return longDisjointSet;
+        public void open(Configuration parameters) throws Exception {
+            this.subtaskId = getRuntimeContext().getIndexOfThisSubtask();
+        }
+
+        @Override
+        public Tuple2<Integer, DisjointSet<Long>> fold(Tuple2<Integer, DisjointSet<Long>> ds, Edge<Long, Long> o) throws Exception {
+
+            ds.f1.union(o.f0, o.f1);
+            return new Tuple2<>(subtaskId, ds.f1);
         }
     }
 
     @SuppressWarnings("serial")
-	private static class CombineCC implements ReduceFunction<DisjointSet<Long>> {
+    private static class CombineCC implements ReduceFunction<Tuple2<Integer, DisjointSet<Long>>> {
         @Override
-        public DisjointSet<Long> reduce(DisjointSet<Long> s1, DisjointSet<Long> s2) throws Exception {
-            int count1 = s1.getMatches().size();
-            int count2 = s2.getMatches().size();
+        public Tuple2<Integer, DisjointSet<Long>> reduce(Tuple2<Integer, DisjointSet<Long>> s1, Tuple2<Integer, DisjointSet<Long>> s2) throws Exception {
+            int count1 = s1.f1.getMatches().size();
+            int count2 = s2.f1.getMatches().size();
             if (count1 <= count2) {
-                s2.merge(s1);
+                s2.f1.merge(s1.f1);
                 return s2;
             }
 
-            s1.merge(s2);
+            s1.f1.merge(s2.f1);
             return s1;
         }
     }
-    
-    @SuppressWarnings("serial")
-	private static class FlattenCC implements FlatMapFunction<DisjointSet<Long>, Tuple2<Long, Long>>{
-
-        @Override
-        public void flatMap(DisjointSet<Long> components, Collector<Tuple2<Long, Long>> collector) throws Exception {
-            for(Long vertex : components.getMatches().keySet()){
-                collector.collect(new Tuple2<>(vertex, components.find(vertex)));
-            }
-        }
-    } 
 
     // *************************************************************************
     //     UTIL METHODS
     // *************************************************************************
 
-    private static boolean fileOutput = false;
-    private static String edgeInputPath = null;
 
-    private static boolean parseParameters(String[] args) {
+    private static GraphStream<Long, NullValue, Long> getTestGraphStream(StreamExecutionEnvironment env) {
 
-        if (args.length > 0) {
-            if (args.length != 1) {
-                System.err.println("Usage: ConnectedComponents <input edges path>");
-                return false;
-            }
-
-            fileOutput = true;
-            edgeInputPath = args[0];
-        } else {
-            System.out.println("Executing ConnectedComponents example with default parameters and built-in default data.");
-            System.out.println("  Provide parameters to read input data from files.");
-            System.out.println("  See the documentation for the correct format of input files.");
-            System.out.println("  Usage: ConnectedComponents <input edges path>");
-        }
-        return true;
-    }
-
-    @SuppressWarnings("serial")
-	private static GraphStream<Long, NullValue, NullValue> getEdgesDataSet(StreamExecutionEnvironment env) {
-
-        if (fileOutput) {
-            return new SimpleEdgeStream<>(env.readTextFile(edgeInputPath)
-                    .map(new MapFunction<String, Edge<Long, NullValue>>() {
-                        @Override
-                        public Edge<Long, NullValue> map(String s) {
-                            String[] fields = s.split("\\t");
-                            long src = Long.parseLong(fields[0]);
-                            long trg = Long.parseLong(fields[1]);
-                            return new Edge<>(src, trg, NullValue.getInstance());
-                        }
-                    }), env);
-        }
-
-        return new SimpleEdgeStream<>(env.generateSequence(1, 10).flatMap(
-                new FlatMapFunction<Long, Edge<Long, NullValue>>() {
+        return new SimpleEdgeStream<>(env.generateSequence(1, 100).flatMap(
+                new FlatMapFunction<Long, Edge<Long, Long>>() {
                     @Override
-                    public void flatMap(Long key, Collector<Edge<Long, NullValue>> out) throws Exception {
-                        for (int i = 1; i < 3; i++) {
-                            long target = key + i;
-                            out.collect(new Edge<>(key, target, NullValue.getInstance()));
-                        }
+                    public void flatMap(Long key, Collector<Edge<Long, Long>> out) throws Exception {
+                        out.collect(new Edge<>(key, key + 2, key * 100));
                     }
-                }), env);
+                }), new AscendingTimestampExtractor<Edge<Long, Long>>() {
+            @Override
+            public long extractAscendingTimestamp(Edge<Long, Long> element, long currentTimestamp) {
+                return element.getValue();
+            }
+        }, env);
     }
 
     @Override

@@ -1,15 +1,14 @@
 package org.apache.flink.graph.streaming;
 
-import org.apache.flink.api.common.functions.FoldFunction;
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.ReduceFunction;
-import org.apache.flink.api.common.functions.RichMapFunction;
+import org.apache.flink.api.common.functions.*;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.operators.translation.WrappingFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -63,32 +62,38 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
         return (DataStream<T>) partialAgg;
     }
 
-
     @SuppressWarnings("serial")
-	private static final class InitialMapper<K, EV> extends RichMapFunction<Edge<K, EV>, Tuple2<Integer, Edge<K, EV>>> {
+    private static final class InitialMapper<K, EV> extends RichMapFunction<Edge<K, EV>, Tuple2<Integer, Edge<K, EV>>> {
+
+        private int partitionIndex;
+
+        @Override
+        public void open(Configuration parameters) throws Exception {
+            this.partitionIndex = getRuntimeContext().getIndexOfThisSubtask();
+        }
+
         @Override
         public Tuple2<Integer, Edge<K, EV>> map(Edge<K, EV> edge) throws Exception {
-            return new Tuple2<>(getRuntimeContext().getIndexOfThisSubtask(), edge);
+            return new Tuple2<>(partitionIndex, edge);
         }
     }
 
     @SuppressWarnings("serial")
-	private static final class PartialAgg<K, EV, S> implements FoldFunction<Tuple2<Integer, Edge<K, EV>>, S>, ResultTypeQueryable<S> {
-
-        private final FoldFunction<Edge<K, EV>, S> foldFunction;
+    private static final class PartialAgg<K, EV, S> extends WrappingFunction<FoldFunction<Edge<K, EV>, S>> 
+            implements ResultTypeQueryable<S>, FoldFunction<Tuple2<Integer,Edge<K, EV>>, S> {
 
         public PartialAgg(FoldFunction<Edge<K, EV>, S> foldFunction) {
-            this.foldFunction = foldFunction;
+            super(foldFunction);
         }
-
+        
         @Override
         public S fold(S s, Tuple2<Integer, Edge<K, EV>> o) throws Exception {
-            return foldFunction.fold(s, o.f1);
+            return getWrappedFunction().fold(s, o.f1);
         }
 
         @Override
         public TypeInformation<S> getProducedType() {
-            return TypeExtractor.createTypeInfo(FoldFunction.class, foldFunction.getClass(), 1,
+            return TypeExtractor.createTypeInfo(FoldFunction.class, getWrappedFunction().getClass(), 1,
                     null, null);
         }
     }

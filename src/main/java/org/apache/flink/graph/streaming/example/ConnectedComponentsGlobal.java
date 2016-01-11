@@ -20,10 +20,8 @@ package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.ProgramDescription;
 import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
-import org.apache.flink.api.common.functions.RichFoldFunction;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
@@ -51,43 +49,35 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
 
         GraphStream<Long, NullValue, Long> edges = getTestGraphStream(env);
 
-        DataStream<Tuple2<Integer, DisjointSet<Long>>> cc = edges.aggregate(
-                new WindowGraphAggregation<Long, Long, Tuple2<Integer, DisjointSet<Long>>, Tuple2<Integer, DisjointSet<Long>>>(
-                        new UpdateCC(), new CombineCC(), new Tuple2<>(-1, new DisjointSet<Long>()), 500, false));
+        DataStream<DisjointSet<Long>> cc = edges.aggregate(
+                new WindowGraphAggregation<Long, Long, DisjointSet<Long>, DisjointSet<Long>>(
+                        new UpdateCC(), new CombineCC(), new DisjointSet<Long>(), 500, false));
         cc.print().setParallelism(1);
         env.execute("Streaming Connected Components");
     }
 
     @SuppressWarnings("serial")
-    public static class UpdateCC extends RichFoldFunction<Edge<Long, Long>, Tuple2<Integer, DisjointSet<Long>>> {
-
-        int subtaskId;
+    public static class UpdateCC implements FoldFunction<Edge<Long, Long>, DisjointSet<Long>> {
 
         @Override
-        public void open(Configuration parameters) throws Exception {
-            this.subtaskId = getRuntimeContext().getIndexOfThisSubtask();
-        }
-
-        @Override
-        public Tuple2<Integer, DisjointSet<Long>> fold(Tuple2<Integer, DisjointSet<Long>> ds, Edge<Long, Long> o) throws Exception {
-
-            ds.f1.union(o.f0, o.f1);
-            return new Tuple2<>(subtaskId, ds.f1);
+        public DisjointSet<Long> fold(DisjointSet<Long> ds, Edge<Long, Long> o) throws Exception {
+            ds.union(o.f0, o.f1);
+            return ds;
         }
     }
 
     @SuppressWarnings("serial")
-    private static class CombineCC implements ReduceFunction<Tuple2<Integer, DisjointSet<Long>>> {
+    private static class CombineCC implements ReduceFunction<DisjointSet<Long>> {
         @Override
-        public Tuple2<Integer, DisjointSet<Long>> reduce(Tuple2<Integer, DisjointSet<Long>> s1, Tuple2<Integer, DisjointSet<Long>> s2) throws Exception {
-            int count1 = s1.f1.getMatches().size();
-            int count2 = s2.f1.getMatches().size();
+        public DisjointSet<Long> reduce(DisjointSet<Long> s1, DisjointSet<Long> s2) throws Exception {
+            int count1 = s1.getMatches().size();
+            int count2 = s2.getMatches().size();
             if (count1 <= count2) {
-                s2.f1.merge(s1.f1);
+                s2.merge(s1);
                 return s2;
             }
 
-            s1.f1.merge(s2.f1);
+            s1.merge(s2);
             return s1;
         }
     }
@@ -105,12 +95,13 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
                     public void flatMap(Long key, Collector<Edge<Long, Long>> out) throws Exception {
                         out.collect(new Edge<>(key, key + 2, key * 100));
                     }
-                }), new AscendingTimestampExtractor<Edge<Long, Long>>() {
-            @Override
-            public long extractAscendingTimestamp(Edge<Long, Long> element, long currentTimestamp) {
-                return element.getValue();
-            }
-        }, env);
+                }),
+                new AscendingTimestampExtractor<Edge<Long, Long>>() {
+                    @Override
+                    public long extractAscendingTimestamp(Edge<Long, Long> element, long currentTimestamp) {
+                        return element.getValue();
+                    }
+                }, env);
     }
 
     @Override

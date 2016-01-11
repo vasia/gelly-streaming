@@ -50,7 +50,7 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
 
         DataStream<DisjointSet<Long>> cc = edges.aggregate(
                 new WindowGraphAggregation<Long, Long, DisjointSet<Long>, DisjointSet<Long>>(
-                        new UpdateCC(), new CombineCC(), new DisjointSet<Long>(), 500, false));
+                        new UpdateCC(), new CombineCC(), new DisjointSet<Long>(), 10000, false));
         cc.print().setParallelism(1);
         env.execute("Streaming Connected Components");
     }

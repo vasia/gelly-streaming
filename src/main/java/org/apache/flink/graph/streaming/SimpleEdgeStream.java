@@ -31,6 +31,7 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.EdgeDirection;
 import org.apache.flink.graph.Vertex;
+import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.TimestampExtractor;
@@ -85,6 +86,7 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 * @param context
      */
 	public SimpleEdgeStream(DataStream<Edge<K, EV>> edges, TimestampExtractor<Edge<K,EV>> timeExtractor, StreamExecutionEnvironment context) {
+		context.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
 		this.edges = edges.assignTimestamps(timeExtractor);
 		this.context = context;
 	}

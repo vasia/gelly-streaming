@@ -44,7 +44,6 @@ public class ConnectedComponentsGlobal implements ProgramDescription {
     public static void main(String[] args) throws Exception {
 
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
         env.setParallelism(4);
 
         GraphStream<Long, NullValue, Long> edges = getTestGraphStream(env);

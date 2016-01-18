@@ -18,209 +18,97 @@
 
 package org.apache.flink.graph.streaming.example;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map.Entry;
-
 import org.apache.flink.api.common.ProgramDescription;
 import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.functions.RichFlatMapFunction;
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.common.functions.FoldFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.streaming.GraphStream;
+import org.apache.flink.graph.streaming.SimpleEdgeStream;
+import org.apache.flink.graph.streaming.WindowGraphAggregation;
+import org.apache.flink.graph.streaming.example.util.DisjointSet;
 import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.IterativeStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;
+import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
 /**
  * The Connected Components algorithm assigns a component ID to each vertex in the graph.
  * Vertices that belong to the same component have the same component ID.
- * This algorithm computes _weakly_ connected components, i.e. edge direction is ignored. 
+ * This algorithm computes _weakly_ connected components, i.e. edge direction is ignored.
+ * <p>
+ * This is a single-pass implementation, which uses a {@link WindowGraphAggregation} to periodically merge
+ * the partitioned state. For an iterative implementation, see {@link IterativeConnectedComponents}.
  */
 public class ConnectedComponents implements ProgramDescription {
 
-	public static void main(String[] args) throws Exception {
+    public static void main(String[] args) throws Exception {
 
-		// Set up the environment
-		if(!parseParameters(args)) {
-			return;
-		}
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(4);
 
-		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(4); // for easier testing
+        GraphStream<Long, NullValue, Long> edges = getTestGraphStream(env);
 
-		DataStream<Tuple2<Long, Long>> edges = getEdgesDataSet(env);
+        DataStream<DisjointSet<Long>> cc = edges.aggregate(
+                new WindowGraphAggregation<Long, Long, DisjointSet<Long>, DisjointSet<Long>>(
+                        new UpdateCC(), new CombineCC(), new DisjointSet<Long>(), 10000, false));
+        cc.print().setParallelism(1);
+        env.execute("Streaming Connected Components");
+    }
 
-		IterativeStream<Tuple2<Long, Long>> iteration = edges.iterate();
-		DataStream<Tuple2<Long, Long>> result = iteration.closeWith(
-				iteration.partitionByHash(0).flatMap(new AssignComponents()));
+    @SuppressWarnings("serial")
+    public static class UpdateCC implements FoldFunction<Edge<Long, Long>, DisjointSet<Long>> {
 
-		// Emit the results
-		result.print();
+        @Override
+        public DisjointSet<Long> fold(DisjointSet<Long> ds, Edge<Long, Long> o) throws Exception {
+            ds.union(o.f0, o.f1);
+            return ds;
+        }
+    }
 
-		env.execute("Streaming Connected Components");
-	}
+    @SuppressWarnings("serial")
+    private static class CombineCC implements ReduceFunction<DisjointSet<Long>> {
+        @Override
+        public DisjointSet<Long> reduce(DisjointSet<Long> s1, DisjointSet<Long> s2) throws Exception {
+            int count1 = s1.getMatches().size();
+            int count2 = s2.getMatches().size();
+            if (count1 <= count2) {
+                s2.merge(s1);
+                return s2;
+            }
 
-	@SuppressWarnings("serial")
-	public static class AssignComponents extends RichFlatMapFunction<Tuple2<Long, Long>, Tuple2<Long, Long>> {
+            s1.merge(s2);
+            return s1;
+        }
+    }
 
-		private HashMap<Long, HashSet<Long>> components = new HashMap<>();
+    // *************************************************************************
+    //     UTIL METHODS
+    // *************************************************************************
 
-		@Override
-		public void flatMap(Tuple2<Long, Long> edge, Collector<Tuple2<Long, Long>> out) {
-			final long sourceId = edge.f0;
-			final long targetId = edge.f1;
-			long sourceComp = -1;
-			long trgComp = -1;
 
-			// check if the endpoints belong to existing components
-			for (Entry<Long, HashSet<Long>> entry : components.entrySet()) {
-				if ((sourceComp == -1) || (trgComp == -1)) {
-					if (entry.getValue().contains(sourceId)) {
-						sourceComp = entry.getKey();
-					}
-					if (entry.getValue().contains(targetId)) {
-						trgComp = entry.getKey();
-					}
-				}
-			}
-			if (sourceComp != -1) {
-				// the source belongs to an existing component
-				if (trgComp != -1) {
-					// merge the components
-					merge(sourceComp, trgComp, out);
-				}
-				else {
-					// add the target to the source's component
-					// and update the component Id if needed
-					addToExistingComponent(sourceComp, targetId, out);
-				}
-			}
-			else {
-				// the source doesn't belong to any component
-				if (trgComp != -1) {
-					// add the source to the target's component
-					// and update the component Id if needed
-					addToExistingComponent(trgComp, sourceId, out);
-				}
-				else {
-					// neither src nor trg belong to any component
-					// create a new component and add them in it
-					createNewComponent(sourceId, targetId, out);
-				}
-			}
-		}
+    private static GraphStream<Long, NullValue, Long> getTestGraphStream(StreamExecutionEnvironment env) {
 
-		private void createNewComponent(long sourceId, long targetId, Collector<Tuple2<Long, Long>> out) {
-			long componentId = Math.min(sourceId, targetId);
-			HashSet<Long> vertexSet = new HashSet<>();
-			vertexSet.add(sourceId);
-			vertexSet.add(targetId);
-			components.put(componentId, vertexSet);
-			out.collect(new Tuple2<Long, Long>(sourceId, componentId));
-			out.collect(new Tuple2<Long, Long>(targetId, componentId));
-		}
+        return new SimpleEdgeStream<>(env.generateSequence(1, 100).flatMap(
+                new FlatMapFunction<Long, Edge<Long, Long>>() {
+                    @Override
+                    public void flatMap(Long key, Collector<Edge<Long, Long>> out) throws Exception {
+                        out.collect(new Edge<>(key, key + 2, key * 100));
+                    }
+                }),
+                new AscendingTimestampExtractor<Edge<Long, Long>>() {
+                    @Override
+                    public long extractAscendingTimestamp(Edge<Long, Long> element, long currentTimestamp) {
+                        return element.getValue();
+                    }
+                }, env);
+    }
 
-		private void addToExistingComponent(long componentId, long toAdd, Collector<Tuple2<Long, Long>> out) {
-			HashSet<Long> vertices = components.remove(componentId);
-			if (componentId >= toAdd) {
-				// output and update component ID
-				for (long v: vertices) {
-					out.collect(new Tuple2<Long, Long>(v, toAdd));
-				}
-				vertices.add(toAdd);
-				components.put(toAdd, vertices);
-			}
-			else {
-				components.put(componentId, vertices);
-				out.collect(new Tuple2<Long, Long>(toAdd, componentId));
-			}
-		}
+    @Override
+    public String getDescription() {
+        return "Streaming Connected Components on Global Aggregation";
+    }
 
-		private void merge(long sourceComp, long trgComp, Collector<Tuple2<Long, Long>> out) {
-			HashSet<Long> srcVertexSet = components.remove(sourceComp);
-			HashSet<Long> trgVertexSet = components.remove(trgComp);
-			long componentId = Math.min(sourceComp, trgComp);
-			if (sourceComp == componentId) {
-				// collect the trgVertexSet
-				if (trgVertexSet!= null) {
-					for (long v: trgVertexSet) {
-						out.collect(new Tuple2<Long, Long>(v, componentId));
-					}
-				}
-			}
-			else {
-				// collect the srcVertexSet
-				if (srcVertexSet != null) {
-					for (long v: srcVertexSet) {
-						out.collect(new Tuple2<Long, Long>(v, componentId));
-					}
-				}
-			}
-			if (trgVertexSet!= null) {
-				srcVertexSet.addAll(trgVertexSet);
-			}
-			components.put(componentId, srcVertexSet);
-		}
-		
-	}
 
-	// *************************************************************************
-	//     UTIL METHODS
-	// *************************************************************************
-
-	private static boolean fileOutput = false;
-	private static String edgeInputPath = null;
-
-	private static boolean parseParameters(String[] args) {
-
-		if(args.length > 0) {
-			if(args.length != 1) {
-				System.err.println("Usage: ConnectedComponents <input edges path>");
-				return false;
-			}
-
-			fileOutput = true;
-			edgeInputPath = args[0];
-		} else {
-			System.out.println("Executing ConnectedComponents example with default parameters and built-in default data.");
-			System.out.println("  Provide parameters to read input data from files.");
-			System.out.println("  See the documentation for the correct format of input files.");
-			System.out.println("  Usage: ConnectedComponents <input edges path>");
-		}
-		return true;
-	}
-
-	@SuppressWarnings("serial")
-	private static DataStream<Tuple2<Long, Long>> getEdgesDataSet(StreamExecutionEnvironment env) {
-
-		if (fileOutput) {
-			return env.readTextFile(edgeInputPath)
-					.map(new MapFunction<String, Tuple2<Long, Long>>() {
-						@Override
-						public Tuple2<Long, Long> map(String s) {
-							String[] fields = s.split("\\t");
-							long src = Long.parseLong(fields[0]);
-							long trg = Long.parseLong(fields[1]);
-							return new Tuple2<>(src, trg);
-						}
-					});
-		}
-
-		return env.generateSequence(1, 10).flatMap(
-				new FlatMapFunction<Long, Tuple2<Long, Long>>() {
-					@Override
-					public void flatMap(Long key, Collector<Tuple2<Long, Long>> out) throws Exception {
-						for (int i = 1; i < 3; i++) {
-							long target = key + i;
-							out.collect(new Tuple2<>(key, target));
-						}
-					}
-				});
-	}
-
-	@Override
-	public String getDescription() {
-		return "Streaming Connected Components";
-	}
 }

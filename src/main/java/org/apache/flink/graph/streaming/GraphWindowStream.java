@@ -32,7 +32,7 @@ import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 /**
  * A stream of discrete graphs, each maintaining
  * the graph state of the edges contained in the respective window.
- * It is created by calling {@link GraphStream#slice()}.
+ * It is created by calling {@link SimpleEdgeStream#slice()}.
  * The graph slice is keyed by the source or target vertex of the edge stream,
  * so that all edges of a vertex are in the same window.
  *

@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.EdgeDirection;
+import org.apache.flink.graph.streaming.EdgesApply;
 import org.apache.flink.graph.streaming.EdgesFold;
 import org.apache.flink.graph.streaming.EdgesReduce;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
@@ -31,6 +32,7 @@ import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.util.Collector;
 import org.junit.Rule;
 import org.junit.rules.TemporaryFolder;
 
@@ -60,6 +62,9 @@ public class TestSlice extends StreamingProgramTestBase {
 		testReduceOnNeighborsDefault();
 		testReduceOnNeighborsIn();
 		testReduceOnNeighborsAll();
+		testApplyOnNeighborsDefault();
+		testApplyOnNeighborsIn();
+		testApplyOnNeighborsAll();
 	}
 
 	public void testFoldNeighborsDefault() throws Exception {
@@ -170,6 +175,60 @@ public class TestSlice extends StreamingProgramTestBase {
 				"5,131\n";
 	}
 
+	public void testApplyOnNeighborsDefault() throws Exception {
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		SimpleEdgeStream<Long, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+
+		DataStream<Tuple2<Long, String>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS))
+				.applyOnNeighbors(new SumEdgeValuesApply());
+
+		sum.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,small\n" +
+				"2,small\n" +
+				"3,big\n" +
+				"4,small\n" +
+				"5,big\n";
+	}
+
+	public void testApplyOnNeighborsIn() throws Exception {
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		SimpleEdgeStream<Long, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+
+		DataStream<Tuple2<Long, String>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS), EdgeDirection.IN)
+				.applyOnNeighbors(new SumEdgeValuesApply());
+
+		sum.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,big\n" +
+				"2,small\n" +
+				"3,small\n" +
+				"4,small\n" +
+				"5,big\n";
+	}
+
+	public void testApplyOnNeighborsAll() throws Exception {
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		SimpleEdgeStream<Long, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+
+		DataStream<Tuple2<Long, String>> sum = graph.slice(Time.of(1, TimeUnit.SECONDS), EdgeDirection.ALL)
+				.applyOnNeighbors(new SumEdgeValuesApply());
+
+		sum.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		env.execute();
+		expectedResult = "1,big\n" +
+				"2,small\n" +
+				"3,big\n" +
+				"4,big\n" +
+				"5,big\n";
+	}
+
 	@SuppressWarnings("serial")
 	private static final class SumEdgeValues implements EdgesFold<Long, Long, Tuple2<Long, Long>> {
 
@@ -187,6 +246,24 @@ public class TestSlice extends StreamingProgramTestBase {
 		public Long reduceEdges(Long firstEdgeValue, Long secondEdgeValue) {
 			return firstEdgeValue + secondEdgeValue;
 		}
-		
+	}
+
+	@SuppressWarnings("serial")
+	private static final class SumEdgeValuesApply implements EdgesApply<Long, Long, Tuple2<Long, String>> {
+
+		@Override
+		public void applyOnEdges(Long vertexID,
+				Iterable<Tuple2<Long, Long>> neighbors, Collector<Tuple2<Long, String>> out) {
+			long sum = 0;
+			for (Tuple2<Long, Long> n: neighbors) {
+				sum += n.f1;
+			}
+			if (sum > 50) {
+				out.collect(new Tuple2<Long, String>(vertexID, "big"));
+			}
+			else {
+				out.collect(new Tuple2<Long, String>(vertexID, "small"));
+			}
+		}
 	}
 }

@@ -18,6 +18,8 @@
 
 package org.apache.flink.graph.streaming;
 
+import java.util.Iterator;
+
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -27,7 +29,9 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.WindowedStream;
+import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.util.Collector;
 
 /**
  * A stream of discrete graphs, each maintaining
@@ -114,4 +118,64 @@ public class GraphWindowStream<K, EV> {
 		}
 	}
 
+	/**
+	 * Performs a generic neighborhood aggregation in the graph window stream.
+	 * Each vertex can produce zero, one or more values from the computation on its neighborhood.
+	 * 
+	 * @param applyFunction the neighborhood computation function
+	 * @return the result stream after applying the user-defined operation on the window
+	 */
+	public <T> DataStream<T> applyOnNeighbors(final EdgesApply<K, EV, T> applyFunction) {
+		return windowedStream.apply(new EdgesWindowFunction<K, EV, T>(applyFunction));
+	}
+
+	@SuppressWarnings("serial")
+	public static final class EdgesWindowFunction<K, EV, T> implements
+			WindowFunction<Edge<K, EV>, T, K, TimeWindow>, ResultTypeQueryable<T> {
+
+		private final EdgesApply<K, EV, T> applyFunction;
+
+		public EdgesWindowFunction(EdgesApply<K, EV, T> applyFunction) {
+			this.applyFunction = applyFunction;
+		}
+
+		public void apply(K key, TimeWindow window,	final Iterable<Edge<K, EV>> edges, Collector<T> out)
+				throws Exception {
+
+			final Iterator<Tuple2<K, EV>> neighborsIterator = new Iterator<Tuple2<K, EV>>() {
+
+				final Iterator<Edge<K, EV>> edgesIterator = edges.iterator();
+
+				@Override
+				public boolean hasNext() {
+					return edgesIterator.hasNext();
+				}
+
+				@Override
+				public Tuple2<K, EV> next() {
+					Edge<K, EV> nextEdge = edgesIterator.next();
+					return new Tuple2<K, EV>(nextEdge.f1, nextEdge.f2);
+				}
+
+				@Override
+				public void remove() {
+					edgesIterator.remove();
+				}
+			};
+
+			Iterable<Tuple2<K, EV>> neighborsIterable = new Iterable<Tuple2<K, EV>>() {
+				public Iterator<Tuple2<K, EV>> iterator() {
+					return neighborsIterator;
+				}
+			};
+
+			applyFunction.applyOnEdges(key, neighborsIterable, out);
+		}
+
+		@Override
+		public TypeInformation<T> getProducedType() {
+			return TypeExtractor.createTypeInfo(EdgesApply.class, applyFunction.getClass(), 2,
+					null, null);
+		}
+	}
 }

@@ -68,6 +68,7 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 * @param context the flink execution environment.
 	 */
 	public SimpleEdgeStream(DataStream<Edge<K, EV>> edges, StreamExecutionEnvironment context) {
+		context.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
 		this.edges = edges;
 		this.context = context;
 	}

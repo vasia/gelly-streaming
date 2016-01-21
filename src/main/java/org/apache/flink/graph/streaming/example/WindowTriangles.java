@@ -18,8 +18,8 @@
 
 package org.apache.flink.graph.streaming.example;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.flink.api.common.ProgramDescription;
@@ -92,20 +92,22 @@ public class WindowTriangles implements ProgramDescription {
 			outT.setField(vertexID, 0);
 			outT.setField(false, 2); //isCandidate=false
 
-			List<Long> neighborIds = new ArrayList<Long>();
+			Set<Long> neighborIdsSet = new HashSet<Long>();
 			for (Tuple2<Long, NullValue> t: neighbors) {
 				outT.setField(t.f0, 1);
 				out.collect(outT);
-				neighborIds.add(t.f0);
+				neighborIdsSet.add(t.f0);
 			}
+			Object[] neighborIds = neighborIdsSet.toArray();
+			neighborIdsSet.clear();
 			outT.setField(true, 2); //isCandidate=true
-			for (int i=0; i<neighborIds.size()-1; i++) {
-				for (int j=i; j<neighborIds.size(); j++) {
+			for (int i=0; i<neighborIds.length-1; i++) {
+				for (int j=i; j<neighborIds.length; j++) {
 					// only emit the candidates
 					// with IDs larger than the vertex ID
-					if ((neighborIds.get(i) > vertexID) && (neighborIds.get(j) > vertexID)) {
-						outT.setField(neighborIds.get(i), 0);
-						outT.setField(neighborIds.get(j), 1);
+					if (((long)neighborIds[i] > vertexID) && ((long)neighborIds[j] > vertexID)) {
+						outT.setField((long)neighborIds[i], 0);
+						outT.setField((long)neighborIds[j], 1);
 						out.collect(outT);
 					}
 				}

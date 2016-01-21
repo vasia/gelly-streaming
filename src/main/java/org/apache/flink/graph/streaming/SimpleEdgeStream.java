@@ -62,7 +62,10 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	private final DataStream<Edge<K, EV>> edges;
 
 	/**
-	 * Creates a graph from an edge stream
+	 * Creates a graph from an edge stream.
+	 * The time characteristic is set to ingestion time  by default.
+	 * 
+	 * @see {@link org.apache.flink.streaming.api.TimeCharacteristic}
 	 *
 	 * @param edges a DataStream of edges.
 	 * @param context the flink execution environment.
@@ -74,10 +77,15 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	}
 
 	/**
-	 * Creates a graph from an edge stream operating in event time specified by timeExtractor 
-	 * @param edges
-	 * @param timeExtractor
-	 * @param context
+	 * Creates a graph from an edge stream operating in event time specified by timeExtractor .
+	 * 
+	 * The time characteristic is set to event time.
+	 * 
+	 * @see {@link org.apache.flink.streaming.api.TimeCharacteristic}
+	 * 
+	 * @param edges a DataStream of edges.
+	 * @param timeExtractor the timestamp extractor.
+	 * @param context the execution environment.
      */
 	public SimpleEdgeStream(DataStream<Edge<K, EV>> edges, TimestampExtractor<Edge<K,EV>> timeExtractor, StreamExecutionEnvironment context) {
 		context.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);

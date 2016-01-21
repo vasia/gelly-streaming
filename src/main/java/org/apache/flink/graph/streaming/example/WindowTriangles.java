@@ -27,7 +27,6 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple;
-import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.graph.Edge;
@@ -35,7 +34,9 @@ import org.apache.flink.graph.EdgeDirection;
 import org.apache.flink.graph.streaming.EdgesApply;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.example.util.DisjointSet;
+import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
@@ -57,13 +58,19 @@ public class WindowTriangles implements ProgramDescription {
 
         SimpleEdgeStream<Long, NullValue> edges = getGraphStream(env);
 
-        edges.slice(Time.of(windowTime, TimeUnit.MILLISECONDS), EdgeDirection.ALL)
+        DataStream<Tuple2<Integer, Long>> triangleCount = 
+        	edges.slice(windowTime, EdgeDirection.ALL)
         	.applyOnNeighbors(new GenerateCandidateEdges())
-        	.keyBy(0, 1).timeWindow(Time.of(windowTime, TimeUnit.MILLISECONDS))
+        	.keyBy(0, 1).timeWindow(windowTime)
 			.apply(new CountTriangles())
-			.timeWindowAll(Time.of(windowTime, TimeUnit.MILLISECONDS)).sum(0)
-			.print();
+			.timeWindowAll(windowTime).sum(0);
 
+        if (fileOutput) {
+        	triangleCount.writeAsText(outputPath);
+        }
+        else {
+        	triangleCount.print();
+        }
         env.execute("Naive window triangle count");
     }
 
@@ -108,12 +115,12 @@ public class WindowTriangles implements ProgramDescription {
 
 	@SuppressWarnings("serial")
 	public static final class CountTriangles implements 
-			WindowFunction<Tuple3<Long, Long, Boolean>, Tuple1<Integer>, Tuple, TimeWindow>{
+			WindowFunction<Tuple3<Long, Long, Boolean>, Tuple2<Integer, Long>, Tuple, TimeWindow>{
 
 		@Override
 		public void apply(Tuple key, TimeWindow window,
 				Iterable<Tuple3<Long, Long, Boolean>> values,
-				Collector<Tuple1<Integer>> out) throws Exception {
+				Collector<Tuple2<Integer, Long>> out) throws Exception {
 			int candidates = 0;
 			int edges = 0;
 			for (Tuple3<Long, Long, Boolean> t: values) {
@@ -125,31 +132,35 @@ public class WindowTriangles implements ProgramDescription {
 				}
 			}
 			if (edges > 0) {
-				out.collect(new Tuple1<Integer>(candidates));
+				out.collect(new Tuple2<Integer, Long>(candidates, window.maxTimestamp()));
 			}
 		}
 	}
 
 	private static boolean fileOutput = false;
 	private static String edgeInputPath = null;
-	private static long windowTime = 1000;
+	private static String outputPath = null;
+	private static Time windowTime = Time.of(300, TimeUnit.MILLISECONDS);
 
 	private static boolean parseParameters(String[] args) {
 
 		if(args.length > 0) {
-			if(args.length != 2) {
-				System.err.println("Usage: WindowTriangles <input edges path> <window time (ms)>");
+			if(args.length != 3) {
+				System.err.println("Usage: WindowTriangles <input edges path> <output path>"
+						+ " <window time (ms)>");
 				return false;
 			}
 
 			fileOutput = true;
 			edgeInputPath = args[0];
-			windowTime = Long.parseLong(args[1]);
+			outputPath = args[1];
+			windowTime = Time.of(Long.parseLong(args[2]), TimeUnit.MILLISECONDS);
 		} else {
 			System.out.println("Executing WindowTriangles example with default parameters and built-in default data.");
 			System.out.println("  Provide parameters to read input data from files.");
 			System.out.println("  See the documentation for the correct format of input files.");
-			System.out.println("  Usage: WindowTriangles <input edges path> <window time (ms)>");
+			System.out.println("  Usage: WindowTriangles <input edges path> <output path>"
+					+ " <window time (ms)>");
 		}
 		return true;
 	}
@@ -159,28 +170,29 @@ public class WindowTriangles implements ProgramDescription {
 	private static SimpleEdgeStream<Long, NullValue> getGraphStream(StreamExecutionEnvironment env) {
 
     	if (fileOutput) {
-			return new SimpleEdgeStream<Long, NullValue>(env.readTextFile(edgeInputPath)
-					.map(new MapFunction<String, Edge<Long, NullValue>>() {
-						@Override
-						public Edge<Long, NullValue> map(String s) {
-							String[] fields = s.split("\\s");
-							long src = Long.parseLong(fields[0]);
-							long trg = Long.parseLong(fields[1]);
-							return new Edge<>(src, trg, NullValue.getInstance());
-						}
-					}), env);
+			return new SimpleEdgeStream<>(env.readTextFile(edgeInputPath)
+				.map(new MapFunction<String, Edge<Long, Long>>() {
+					@Override
+					public Edge<Long, Long> map(String s) {
+						String[] fields = s.split("\\s");
+						long src = Long.parseLong(fields[0]);
+						long trg = Long.parseLong(fields[1]);
+						long timestamp = Long.parseLong(fields[2]);
+						return new Edge<>(src, trg, timestamp);
+					}
+				}), new EdgeValueTimestampExtractor(), env).mapEdges(new RemoveEdgeValue());
 		}
-    	return new SimpleEdgeStream<Long, NullValue>(
-    			env.generateSequence(1, 10).flatMap(
-    				new FlatMapFunction<Long, Edge<Long, NullValue>>() {
-    					@Override
-    					public void flatMap(Long key, Collector<Edge<Long, NullValue>> out) throws Exception {
-    						for (int i = 1; i < 3; i++) {
-    							long target = key + i;
-    							out.collect(new Edge<>(key, target, NullValue.getInstance()));
-    						}
-    					}
-    				}), env);
+
+    	return new SimpleEdgeStream<>(env.generateSequence(1, 10).flatMap(
+                new FlatMapFunction<Long, Edge<Long, Long>>() {
+                    @Override
+                    public void flatMap(Long key, Collector<Edge<Long, Long>> out) throws Exception {
+                    	for (int i = 1; i < 3; i++) {
+							long target = key + i;
+							out.collect(new Edge<>(key, target, key*100 + (i-1)*50));
+						}
+                    }
+                }), new EdgeValueTimestampExtractor(), env).mapEdges(new RemoveEdgeValue()); 
     }
 
     @SuppressWarnings("serial")
@@ -206,6 +218,22 @@ public class WindowTriangles implements ProgramDescription {
 			return value;
 		}
     }
+
+    @SuppressWarnings("serial")
+	public static final class EdgeValueTimestampExtractor extends AscendingTimestampExtractor<Edge<Long, Long>> {
+        @Override
+        public long extractAscendingTimestamp(Edge<Long, Long> element, long currentTimestamp) {
+            return element.getValue();
+        }
+    }
+
+    @SuppressWarnings("serial")
+	public static final class RemoveEdgeValue implements MapFunction<Edge<Long,Long>, NullValue> {
+		@Override
+		public NullValue map(Edge<Long, Long> edge) {
+			return NullValue.getInstance();
+		}
+	}
 
     @Override
     public String getDescription() {

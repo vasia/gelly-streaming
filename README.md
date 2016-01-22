@@ -3,6 +3,19 @@ Gelly Streaming
 
 An experiemental API for single-pass graph streaming analytics on [Apache Flink](https://flink.apache.org/).
 
+##A Graph Streaming Model
+We implement a light-weight distributed graph streaming model for online processing of graph statistics, improving
+aggregates, approximations, one-pass algorithms and graph windows, on **unbounded** graph streams. Our work builds on existing abstractions for stream processing on distributed dataflows, and specifically of Apache Flink.
+
+There are two main abstractions: the `GraphStream` and the `GraphWindowStream`.
+
+The `GraphStream` is the core abstract graph stream representation in our model. A graph stream can be constructed by a given data stream of edges (edge additions). Edges can hold optional state such as weights and reoccurrence of an edge is simply reprocessed. Such an edge stream is fundamental in most evolving graph use cases. For example, consider a dynamic social graph made out of streams of user events that occur in a social network. In that case vertices represent users and edges any possible interaction between them. The graph stream can encapsulate several incremental transformations, property streams, and streaming aggregations such as a global reduce function.
+
+The `GraphWindowStream` forms a stream of discrete graphs, each maintaining the graph state of the edges contained in the respective window. This is particularly useful to applications that are interested in the most recent or fresh state of the data to apply computations. We call such an operation a graph `slice`. Apart from the existing graph stream transformations and properties, graph windows also support additional aggregations, such as reduce functions on neighbors.
+
+A graph stream **does not maintain the graph structure** internally per se, rather than a summary distributed over
+stateful operators in the execution graph.
+
 ###Graph Stream Types
 
 * `SimpleEdgeStream`: A graph stream where the stream consists solely of edges additions without timestamps.
@@ -43,12 +56,14 @@ An experiemental API for single-pass graph streaming analytics on [Apache Flink]
 
 * `foldNeighbors`: Performs a neighborhood fold on the graph window stream.
 * `reduceOnEdges`: Performs an aggregation on the neighboring edges of each vertex on the graph window stream.
+* `applyOnNeighbors`: Performs a a generic neighborhood aggregation in the graph window stream, where each vertex can produce zero, one or more values from the computation on its neighborhood.
 
 
 ## Graph Streaming Algorithms
 
 * Connected Components
 * Bipartiteness Check
+* Window Triangle Count
 * Triangle Count Estimation
 * Weighted Matching
 * Continuous Degree Aggregate

@@ -1,6 +1,9 @@
 package org.apache.flink.graph.streaming;
 
-import org.apache.flink.api.common.functions.*;
+import org.apache.flink.api.common.functions.FoldFunction;
+import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.ReduceFunction;
+import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.operators.translation.WrappingFunction;
@@ -27,21 +30,21 @@ import java.util.concurrent.TimeUnit;
  */
 public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends GraphAggregation<K, EV, S, T> {
 
-	private static final long serialVersionUID = 1L;
-	private long timeMillis;
+    private static final long serialVersionUID = 1L;
+    private long timeMillis;
 
 
-    public WindowGraphAggregation(FoldFunction<Edge<K, EV>, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> mergeFun, S initialVal, long timeMillis, boolean transientState) {
+    public WindowGraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> mergeFun, S initialVal, long timeMillis, boolean transientState) {
         super(updateFun, combineFun, mergeFun, initialVal, transientState);
         this.timeMillis = timeMillis;
     }
 
-    public WindowGraphAggregation(FoldFunction<Edge<K, EV>, S> updateFun, ReduceFunction<S> combineFun, S initialVal, long timeMillis, boolean transientState) {
+    public WindowGraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, S initialVal, long timeMillis, boolean transientState) {
         this(updateFun, combineFun, null, initialVal, timeMillis, transientState);
     }
 
     @SuppressWarnings("unchecked")
-	@Override
+    @Override
     public DataStream<T> run(final DataStream<Edge<K, EV>> edgeStream) {
 
         //For parallel window support we key the edge stream by partition and apply a parallel fold per partition.
@@ -79,16 +82,16 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
     }
 
     @SuppressWarnings("serial")
-    private static final class PartialAgg<K, EV, S> extends WrappingFunction<FoldFunction<Edge<K, EV>, S>> 
-            implements ResultTypeQueryable<S>, FoldFunction<Tuple2<Integer,Edge<K, EV>>, S> {
+    private static final class PartialAgg<K, EV, S> extends WrappingFunction<EdgesFold<K, EV, S>>
+            implements ResultTypeQueryable<S>, FoldFunction<Tuple2<Integer, Edge<K, EV>>, S> {
 
-        public PartialAgg(FoldFunction<Edge<K, EV>, S> foldFunction) {
+        public PartialAgg(EdgesFold<K, EV, S> foldFunction) {
             super(foldFunction);
         }
-        
+
         @Override
         public S fold(S s, Tuple2<Integer, Edge<K, EV>> o) throws Exception {
-            return getWrappedFunction().fold(s, o.f1);
+            return getWrappedFunction().foldEdges(s, o.f1.getSource(), o.f1.getTarget(), o.f1.getValue());
         }
 
         @Override

@@ -27,6 +27,7 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.streaming.EdgesFold;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
@@ -72,14 +73,14 @@ public class ConnectedComponents implements ProgramDescription {
     }
 
     @SuppressWarnings("serial")
-    public static class UpdateCC implements FoldFunction<Edge<Long, NullValue>, DisjointSet<Long>> {
+    public static class UpdateCC implements EdgesFold<Long, NullValue, DisjointSet<Long>> {
 
-        @Override
-        public DisjointSet<Long> fold(DisjointSet<Long> ds, Edge<Long, NullValue> o) throws Exception {
-            ds.union(o.f0, o.f1);
-            return ds;
-        }
-    }
+		@Override
+		public DisjointSet<Long> foldEdges(DisjointSet<Long> ds, Long vertex, Long vertex2, NullValue edgeValue) throws Exception {
+			ds.union(vertex,vertex2);
+			return ds;
+		}
+	}
 
     @SuppressWarnings("serial")
     private static class CombineCC implements ReduceFunction<DisjointSet<Long>> {

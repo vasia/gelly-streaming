@@ -23,6 +23,7 @@ import java.util.Iterator;
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.operators.translation.WrappingFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
@@ -63,12 +64,14 @@ public class GraphWindowStream<K, EV> {
 	}
 
 	@SuppressWarnings("serial")
-	public static final class EdgesFoldFunction<K, EV, T> implements FoldFunction<Edge<K, EV>, T>,
-		ResultTypeQueryable<T> {
+	public static final class EdgesFoldFunction<K, EV, T> extends WrappingFunction<EdgesFold<K, EV, T>>
+			implements FoldFunction<Edge<K, EV>, T>, ResultTypeQueryable<T>
+	{
 
 		private final EdgesFold<K, EV, T> foldFunction;
 
 		public EdgesFoldFunction(EdgesFold<K, EV, T> foldFunction) {
+			super(foldFunction);
 			this.foldFunction = foldFunction;
 		}
 

@@ -24,6 +24,7 @@ import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.streaming.EdgesFold;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
@@ -53,10 +54,10 @@ public class BipartitenessCheck implements ProgramDescription {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 		GraphStream<Long, NullValue, NullValue> graph = new SimpleEdgeStream<>(getEdgesDataSet(env), env);
 		
-		FoldFunction<Edge<Long, NullValue>, Candidates> updFun = new FoldFunction<Edge<Long, NullValue>, Candidates>() {
+		EdgesFold<Long, NullValue, Candidates> updFun = new EdgesFold<Long, NullValue, Candidates>() {
 			@Override
-			public Candidates fold(Candidates candidates, Edge<Long, NullValue> edge) throws Exception {
-				return candidates.merge(edgeToCandidate(edge));
+			public Candidates foldEdges(Candidates candidates, Long v1, Long v2, NullValue edgeVal) throws Exception {
+				return candidates.merge(edgeToCandidate(v1, v2));  
 			}
 		};
 		
@@ -67,7 +68,8 @@ public class BipartitenessCheck implements ProgramDescription {
 			}
 		};
 		
-		DataStream<Candidates> bipartition = graph.aggregate(new WindowGraphAggregation<Long,NullValue, Candidates, Candidates>(updFun, combineFun, new Candidates(true), 500, false));
+		DataStream<Candidates> bipartition = graph.aggregate(
+				new WindowGraphAggregation<Long,NullValue, Candidates, Candidates>(updFun, combineFun, new Candidates(true), 500, false));
 		
 		// Emit the results
 		if (fileOutput) {
@@ -88,9 +90,9 @@ public class BipartitenessCheck implements ProgramDescription {
 	private static String edgeInputPath = null;
 	private static String outputPath = null;
 
-	public static Candidates edgeToCandidate(Edge<Long, NullValue> edge) throws Exception {
-		long src = Math.min(edge.getSource(), edge.getTarget());
-		long trg = Math.max(edge.getSource(), edge.getTarget());
+	public static Candidates edgeToCandidate(long v1, long v2) throws Exception {
+		long src = Math.min(v1, v2);
+		long trg = Math.max(v1, v2);
 		Candidates cand = new Candidates(true);
 		cand.add(src, new SignedVertex(src, true));
 		cand.add(src, new SignedVertex(trg, false));

@@ -1,7 +1,6 @@
 package org.apache.flink.graph.streaming;
 
 import org.apache.flink.api.common.functions.FlatMapFunction;
-import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.operators.translation.WrappingFunction;
@@ -26,7 +25,7 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
      * we slice the edge stream into windows a fold will output its aggregation state value per window, otherwise, this
      * operates edge-wise
      */
-    private final FoldFunction<Edge<K, EV>, S> updateFun;
+    private final EdgesFold<K, EV, S> updateFun;
 
     /**
      * An optional combine function for updating graph property state
@@ -45,7 +44,7 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
      */
     private final boolean transientState;
 
-    protected GraphAggregation(FoldFunction<Edge<K, EV>, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> mergeFun, S initialValue, boolean transientState) {
+    protected GraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> mergeFun, S initialValue, boolean transientState) {
         this.updateFun = updateFun;
         this.combineFun = combineFun;
         this.mergeFun = mergeFun;
@@ -61,7 +60,7 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
         return combineFun;
     }
 
-    public FoldFunction<Edge<K, EV>, S> getUpdateFun() {
+    public EdgesFold<K, EV, S> getUpdateFun() {
         return updateFun;
     }
 

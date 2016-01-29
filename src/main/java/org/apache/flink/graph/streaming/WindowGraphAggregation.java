@@ -34,8 +34,8 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
     private long timeMillis;
 
 
-    public WindowGraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> mergeFun, S initialVal, long timeMillis, boolean transientState) {
-        super(updateFun, combineFun, mergeFun, initialVal, transientState);
+    public WindowGraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transformFun, S initialVal, long timeMillis, boolean transientState) {
+        super(updateFun, combineFun, transformFun, initialVal, transientState);
         this.timeMillis = timeMillis;
     }
 
@@ -58,8 +58,8 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
                 .timeWindow(Time.of(timeMillis, TimeUnit.MILLISECONDS))
                 .fold(getInitialValue(), new PartialAgg<K, EV, S>(getUpdateFun())).flatMap(getAggregator(edgeStream)).setParallelism(1);
 
-        if (getMergeFun() != null) {
-            return partialAgg.map(getMergeFun());
+        if (getTrasform() != null) {
+            return partialAgg.map(getTrasform());
         }
 
         return (DataStream<T>) partialAgg;

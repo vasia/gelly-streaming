@@ -96,7 +96,7 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 
         @Override
         public TypeInformation<S> getProducedType() {
-            return TypeExtractor.createTypeInfo(FoldFunction.class, getWrappedFunction().getClass(), 1,
+            return TypeExtractor.createTypeInfo(EdgesFold.class, getWrappedFunction().getClass(), 2,
                     null, null);
         }
     }

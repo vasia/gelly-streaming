@@ -38,7 +38,7 @@ import org.apache.flink.util.Collector;
  * This algorithm computes _weakly_ connected components, i.e. edge direction is ignored. 
  * <p>
  * This implementation uses streaming iterations to asynchronously merge state among partitions.
- * For a single-pass implementation, see {@link ConnectedComponents}.
+ * For a single-pass implementation, see {@link ConnectedComponentsExample}.
  */
 public class IterativeConnectedComponents implements ProgramDescription {
 
@@ -178,17 +178,17 @@ public class IterativeConnectedComponents implements ProgramDescription {
 
 		if(args.length > 0) {
 			if(args.length != 1) {
-				System.err.println("Usage: ConnectedComponents <input edges path>");
+				System.err.println("Usage: ConnectedComponentsExample <input edges path>");
 				return false;
 			}
 
 			fileOutput = true;
 			edgeInputPath = args[0];
 		} else {
-			System.out.println("Executing ConnectedComponents example with default parameters and built-in default data.");
+			System.out.println("Executing ConnectedComponentsExample example with default parameters and built-in default data.");
 			System.out.println("  Provide parameters to read input data from files.");
 			System.out.println("  See the documentation for the correct format of input files.");
-			System.out.println("  Usage: ConnectedComponents <input edges path>");
+			System.out.println("  Usage: ConnectedComponentsExample <input edges path>");
 		}
 		return true;
 	}

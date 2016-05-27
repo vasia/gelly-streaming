@@ -223,11 +223,11 @@ public class WindowTriangles implements ProgramDescription {
 
     @SuppressWarnings("serial")
 	public static final class EdgeValueTimestampExtractor extends AscendingTimestampExtractor<Edge<Long, Long>> {
-        @Override
-        public long extractAscendingTimestamp(Edge<Long, Long> element, long currentTimestamp) {
-            return element.getValue();
-        }
-    }
+		@Override
+		public long extractAscendingTimestamp(Edge<Long, Long> element) {
+			return element.getValue();
+		}
+	}
 
     @SuppressWarnings("serial")
 	public static final class RemoveEdgeValue implements MapFunction<Edge<Long,Long>, NullValue> {

@@ -32,8 +32,8 @@ import org.apache.flink.graph.Vertex;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.TimestampExtractor;
-import org.apache.flink.streaming.api.windowing.time.AbstractTime;
+import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;
+import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
@@ -87,9 +87,9 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 * @param timeExtractor the timestamp extractor.
 	 * @param context the execution environment.
      */
-	public SimpleEdgeStream(DataStream<Edge<K, EV>> edges, TimestampExtractor<Edge<K,EV>> timeExtractor, StreamExecutionEnvironment context) {
+	public SimpleEdgeStream(DataStream<Edge<K, EV>> edges, AscendingTimestampExtractor<Edge<K,EV>> timeExtractor, StreamExecutionEnvironment context) {
 		context.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-		this.edges = edges.assignTimestamps(timeExtractor);
+		this.edges = edges.assignTimestampsAndWatermarks(timeExtractor);
 		this.context = context;
 	}
 
@@ -131,12 +131,12 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 * The KeyedStream is then windowed into tumbling time windows.
 	 * <p>
 	 * By default, each vertex is grouped with its outgoing edges.
-	 * Use {@link #slice(AbstractTime, EdgeDirection)} to manually set the edge direction grouping.
+	 * Use {@link #slice(Time, EdgeDirection)} to manually set the edge direction grouping.
 	 * 
 	 * @param size the size of the window
 	 * @return a GraphWindowStream of the specified size 
 	 */
-	public GraphWindowStream<K, EV> slice(AbstractTime size) {
+	public GraphWindowStream<K, EV> slice(Time size) {
 		return slice(size, EdgeDirection.OUT);
 	}
 
@@ -150,7 +150,7 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 * @param direction the EdgeDirection to key by
 	 * @return a GraphWindowStream of the specified size, keyed by
 	 */
-	public GraphWindowStream<K, EV> slice(AbstractTime size, EdgeDirection direction)
+	public GraphWindowStream<K, EV> slice(Time size, EdgeDirection direction)
 		throws IllegalArgumentException {
 
 		switch (direction) {

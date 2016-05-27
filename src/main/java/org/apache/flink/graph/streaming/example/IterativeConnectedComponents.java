@@ -55,7 +55,7 @@ public class IterativeConnectedComponents implements ProgramDescription {
 
 		IterativeStream<Tuple2<Long, Long>> iteration = edges.iterate();
 		DataStream<Tuple2<Long, Long>> result = iteration.closeWith(
-				iteration.partitionByHash(0).flatMap(new AssignComponents()));
+				iteration.keyBy(0).flatMap(new AssignComponents()));
 
 		// Emit the results
 		result.print();

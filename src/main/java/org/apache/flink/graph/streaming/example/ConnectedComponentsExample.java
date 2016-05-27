@@ -127,7 +127,8 @@ public class ConnectedComponentsExample implements ProgramDescription {
 				}),
 				new AscendingTimestampExtractor<Edge<Long, Long>>() {
 					@Override
-					public long extractAscendingTimestamp(Edge<Long, Long> element, long currentTimestamp) {
+
+					public long extractAscendingTimestamp(Edge<Long, Long> element) {
 						return element.getValue();
 					}
 				}, env).mapEdges(new MapFunction<Edge<Long, Long>, NullValue>() {

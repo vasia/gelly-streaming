@@ -22,10 +22,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * WIP Graph Aggregation on Parallel Time Window
  *
- * @param <K>
- * @param <EV>
- * @param <S>
- * @param <T>
+ * @param <K> the edge stream's key type
+ * @param <EV> the edges stream's value type
+ * @param <S> the output type of the partial aggregation
+ * @param <T> the output type of the result
  */
 public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends GraphAggregation<K, EV, S, T> {
 
@@ -55,7 +55,7 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 				.map(new InitialMapper<K, EV>()).returns(typeInfo)
 				.keyBy(0)
 				.timeWindow(Time.of(timeMillis, TimeUnit.MILLISECONDS))
-				.fold(getInitialValue(), new PartialAgg<K, EV, S>(getUpdateFun())).flatMap(getAggregator(edgeStream)).setParallelism(1);
+				.fold(getInitialValue(), new PartialAgg<>(getUpdateFun())).flatMap(getAggregator(edgeStream)).setParallelism(1);
 
 		if (getTrasform() != null) {
 			return partialAgg.map(getTrasform());

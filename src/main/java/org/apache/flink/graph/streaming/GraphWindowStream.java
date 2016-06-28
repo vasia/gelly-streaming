@@ -64,14 +64,13 @@ public class GraphWindowStream<K, EV> {
 	}
 
 	@SuppressWarnings("serial")
-	public static final class EdgesFoldFunction<K, EV, T> extends WrappingFunction<EdgesFold<K, EV, T>>
+	public static final class EdgesFoldFunction<K, EV, T>
 			implements FoldFunction<Edge<K, EV>, T>, ResultTypeQueryable<T>
 	{
 
 		private final EdgesFold<K, EV, T> foldFunction;
 
 		public EdgesFoldFunction(EdgesFold<K, EV, T> foldFunction) {
-			super(foldFunction);
 			this.foldFunction = foldFunction;
 		}
 

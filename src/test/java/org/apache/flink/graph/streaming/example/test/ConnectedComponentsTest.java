@@ -40,7 +40,7 @@ public class ConnectedComponentsTest extends StreamingProgramTestBase {
 	public static final String[] parser(ArrayList<String> list) {
 		int s = list.size();
 		String r = list.get(s - 1);  // to get the final combine result which is stored at the end of result
-		String t = null;
+		String t;
 		list.clear();
 		String[] G = r.split("=");
 		for (int i = 0; i < G.length; i++) {

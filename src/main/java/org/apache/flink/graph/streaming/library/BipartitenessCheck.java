@@ -39,8 +39,6 @@ import java.io.Serializable;
  */
 public class BipartitenessCheck<K extends Serializable, EV> extends WindowGraphAggregation<K, EV, Candidates, Candidates> implements Serializable {
 
-	private long mergeWindowTime;
-
 	/**
 	 * Creates a BipartitenessCheck object using WindowGraphAggregation class.
 	 * To perform the Bipartiteness check the BipartitenessCheck object is passed as an argument

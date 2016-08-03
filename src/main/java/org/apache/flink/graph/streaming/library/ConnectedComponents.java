@@ -42,8 +42,6 @@ import java.io.Serializable;
  */
 public class ConnectedComponents<K extends Serializable, EV> extends WindowGraphAggregation<K, EV, DisjointSet<K>, DisjointSet<K>> implements Serializable {
 
-	private long mergeWindowTime;
-
 	/**
 	 * Creates a ConnectedComponents object using WindowGraphAggregation class.
 	 * To find number of Connected Components the ConnectedComponents object is passed as an argument

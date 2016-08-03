@@ -31,8 +31,13 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The Degree Distribution algorithm emits a stream of <degree, count>
+ * The Degree Distribution algorithm emits a stream of (degree, count)
  * and works for fully dynamic streams of edges, i.e. both edge additions and deletions.
+ * <p>
+ * NOTE: The algorithm does not check the edge stream for consistency,
+ * i.e. it is assumed that an edge deletion refers to a previously added edge
+ * and will always have effect. However, a vertex degree won't be further decremented if 0.
+ * Adding the same edge multiple times will always have effect.
  */
 public class DegreeDistribution {
 
@@ -43,62 +48,88 @@ public class DegreeDistribution {
 		}
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		env.setParallelism(1);
 		DataStream<Tuple3<Integer, Integer, EventType>> edges = getGraphStream(env);
-		edges.flatMap(
-				new FlatMapFunction<Tuple3<Integer,Integer,EventType>, Tuple2<Integer, Integer>>() {
-					public void flatMap(Tuple3<Integer, Integer, EventType> t, Collector<Tuple2<Integer, Integer>> c) {
-						// output <vertexID, degreeChange>
-						int change = t.f2.equals(EventType.EDGE_ADDITION) ? 1 : -1 ;
-						c.collect(new Tuple2<>(t.f0, change));
-						c.collect(new Tuple2<>(t.f1, change));
-					}
-				}).keyBy(0).flatMap(
-				new FlatMapFunction<Tuple2<Integer, Integer>, Tuple2<Integer, Integer>>() {
-
-					Map<Integer, Integer> verticesWithDegrees = new HashMap<>();
-
-					public void flatMap(Tuple2<Integer, Integer> t, Collector<Tuple2<Integer, Integer>> c) {
-						// output <degree, localCount>
-						if (verticesWithDegrees.containsKey(t.f0)) {
-							// update existing vertex
-							int oldDegree = verticesWithDegrees.get(t.f0);
-							int newDegree = oldDegree + t.f1;
-							if (newDegree > 0) {
-								verticesWithDegrees.put(t.f0, newDegree);
-								c.collect(new Tuple2<>(newDegree, 1));
-							}
-							else {
-								verticesWithDegrees.remove(t.f0);
-							}
-							c.collect(new Tuple2<>(oldDegree, -1));
-						} else {
-							// first time we see this vertex
-							verticesWithDegrees.put(t.f0, 1);
-							c.collect(new Tuple2<>(1, 1));
-						}
-					}
-				}).keyBy(0).map(
-				new MapFunction<Tuple2<Integer, Integer>, Tuple2<Integer, Integer>>() {
-
-					Map<Integer, Integer> degreesWithCounts = new HashMap<>();
-
-					public Tuple2<Integer, Integer> map(Tuple2<Integer, Integer> t) {
-						if (degreesWithCounts.containsKey(t.f0)) {
-							// update existing degree
-							int newCount = degreesWithCounts.get(t.f0) + t.f1;
-							degreesWithCounts.put(t.f0, newCount);
-							return new Tuple2<>(t.f0, newCount);
-						} else {
-							// first time degree
-							degreesWithCounts.put(t.f0, t.f1);
-							return new Tuple2<>(t.f0, t.f1);
-						}
-					}
-				}).print();
+		// 1. emit (vertexID, 1) or (vertexID, -1) for addition or deletion
+		edges.flatMap(new EmitVerticesWithChange())
+				// group by vertex ID and maintain degree per vertex
+				.keyBy(0).flatMap(new VertexDegreeCounts())
+				// group by degree and emit current count
+				.keyBy(0).map(new DegreeDistributionMap())
+				.writeAsText(resultPath);
 
 		env.execute("Streaming Degree Distribution");
 	}
+
+	// *** Transformation Methods *** //
+
+	/**
+	 * Transforms an event into tuples of (srcID, change), (trgID, change)
+	 * where change = 1 for an addition and change = -1 for a deletion.
+	 */
+	private static final class EmitVerticesWithChange implements
+			FlatMapFunction<Tuple3<Integer, Integer, EventType>, Tuple2<Integer, Integer>> {
+
+		public void flatMap(Tuple3<Integer, Integer, EventType> t, Collector<Tuple2<Integer, Integer>> c) {
+			// output <vertexID, degreeChange>
+			int change = t.f2.equals(EventType.EDGE_ADDITION) ? 1 : -1 ;
+			c.collect(new Tuple2<>(t.f0, change));
+			c.collect(new Tuple2<>(t.f1, change));
+		}
+	}
+
+	/**
+	 * Maintains a hash map of vertex ID -> degree and emits changes in the form of (degree, change).
+	 */
+	private static final class VertexDegreeCounts implements FlatMapFunction<Tuple2<Integer, Integer>, Tuple2<Integer, Integer>> {
+
+		Map<Integer, Integer> verticesWithDegrees = new HashMap<>();
+
+		public void flatMap(Tuple2<Integer, Integer> t, Collector<Tuple2<Integer, Integer>> c) {
+			// output <degree, localCount>
+			if (verticesWithDegrees.containsKey(t.f0)) {
+				// update existing vertex
+				int oldDegree = verticesWithDegrees.get(t.f0);
+				int newDegree = oldDegree + t.f1;
+				if (newDegree > 0) {
+					verticesWithDegrees.put(t.f0, newDegree);
+					c.collect(new Tuple2<>(newDegree, 1));
+				}
+				else {
+					// if the current degree is <= 0: remove the vertex
+					verticesWithDegrees.remove(t.f0);
+				}
+				c.collect(new Tuple2<>(oldDegree, -1));
+			} else {
+				// first time we see this vertex
+				if (t.f1 > 0) {
+					verticesWithDegrees.put(t.f0, 1);
+					c.collect(new Tuple2<>(1, 1));
+				}
+			}
+		}
+	}
+
+	/**
+	 * Computes degree distribution and emits (degree, count) tuples for every change.
+	 */
+	private static final class DegreeDistributionMap implements MapFunction<Tuple2<Integer, Integer>, Tuple2<Integer, Integer>> {
+
+		Map<Integer, Integer> degreesWithCounts = new HashMap<>();
+
+		public Tuple2<Integer, Integer> map(Tuple2<Integer, Integer> t) {
+			if (degreesWithCounts.containsKey(t.f0)) {
+				// update existing degree
+				int newCount = degreesWithCounts.get(t.f0) + t.f1;
+				degreesWithCounts.put(t.f0, newCount);
+				return new Tuple2<>(t.f0, newCount);
+			} else {
+				// first time degree
+				degreesWithCounts.put(t.f0, t.f1);
+				return new Tuple2<>(t.f0, t.f1);
+			}
+		}
+	}
+
 
 	// *************************************************************************
 	//     UTIL METHODS
@@ -106,22 +137,24 @@ public class DegreeDistribution {
 
 	private static boolean fileOutput = false;
 	private static String edgeInputPath = null;
+	private static String resultPath = null;
 
 	private static boolean parseParameters(String[] args) {
 
 		if (args.length > 0) {
-			if (args.length != 3) {
-				System.err.println("Usage: DegreeDistribution <input edges path>");
+			if (args.length != 2) {
+				System.err.println("Usage: DegreeDistribution <input edges path> <result path>");
 				return false;
 			}
 
 			fileOutput = true;
 			edgeInputPath = args[0];
+			resultPath = args[1];
 		} else {
 			System.out.println("Executing DegreeDistribution example with default parameters and built-in default data.");
 			System.out.println("  Provide parameters to read input data from files.");
 			System.out.println("  See the documentation for the correct format of input files.");
-			System.out.println("  Usage: DegreeDistribution <input edges path>");
+			System.out.println("  Usage: DegreeDistribution <input edges path> <result path>");
 		}
 		return true;
 	}
@@ -131,7 +164,7 @@ public class DegreeDistribution {
 	private static DataStream<Tuple3<Integer, Integer, EventType>> getGraphStream(StreamExecutionEnvironment env) {
 
 		if (fileOutput) {
-			env.readTextFile(edgeInputPath)
+			return env.readTextFile(edgeInputPath)
 					.map(new MapFunction<String, Tuple3<Integer, Integer, EventType>>() {
 						@Override
 						public Tuple3<Integer, Integer, EventType> map(String s) {
@@ -149,6 +182,7 @@ public class DegreeDistribution {
 				new Tuple3<>(2, 3, EventType.EDGE_ADDITION),
 				new Tuple3<>(1, 4, EventType.EDGE_ADDITION),
 				new Tuple3<>(2, 3, EventType.EDGE_DELETION),
-				new Tuple3<>(3, 4, EventType.EDGE_ADDITION));
+				new Tuple3<>(3, 4, EventType.EDGE_ADDITION),
+				new Tuple3<>(1, 2, EventType.EDGE_DELETION));
 	}
 }

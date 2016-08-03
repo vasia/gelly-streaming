@@ -32,4 +32,30 @@ public class ExamplesTestData {
 
 	public static final String TRIANGLES_RESULT =
 			"(2,1199)\n(2,399)\n(3,799)\n";
+
+	public static final String DEGREES_DATA =
+			"1 2 +\n" + "2 3 +\n" + "1 4 +\n"
+			+ "2 3 -\n" + "3 4 +\n" + "1 2 -";
+
+	public static final String DEGREES_RESULT =
+			"(1,1)\n(1,2)\n" +
+					"(2,1)\n(1,1)\n(1,2)\n" +
+					"(2,2)\n(1,1)\n(1,2)\n" +
+					"(1,3)\n(2,1)\n(1,2)\n"+
+					"(1,3)\n(2,2)\n(1,2)\n" +
+					"(1,3)\n(2,1)\n(1,2)";
+
+	public static final String DEGREES_DATA_ZERO =
+			"1 2 +\n" + "2 3 +\n" + "1 4 +\n" +
+					"2 3 -\n" + "3 4 +\n" + "1 2 -\n" +
+					"2 3 -";
+
+	public static final String DEGREES_RESULT_ZERO =
+			"(1,1)\n(1,2)\n" +
+					"(2,1)\n(1,1)\n(1,2)\n" +
+					"(2,2)\n(1,1)\n(1,2)\n" +
+					"(1,3)\n(2,1)\n(1,2)\n"+
+					"(1,3)\n(2,2)\n(1,2)\n" +
+					"(1,3)\n(2,1)\n(1,2)\n" +
+					"(1,1)";
 }

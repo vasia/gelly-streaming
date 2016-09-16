@@ -23,6 +23,7 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.functions.KeySelector;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
@@ -38,17 +39,12 @@ import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  *
- * Represents a graph stream where the stream consists solely of {@link org.apache.flink.graph.Edge edges}
- * without timestamps.
+ * Represents a graph stream where the stream consists solely of {@link org.apache.flink.graph.Edge edges}.
  * <p>
- * For event-time support @see 
  *
  * @see org.apache.flink.graph.Edge
  *
@@ -520,6 +516,47 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 		}
 
 		return result;
+	}
+
+	//TODO: write tests
+	/**
+	 * Builds the neighborhood state by creating adjacency lists.
+	 * Neighborhoods are currently built using a TreeSet.
+	 *
+	 * @param directed if true, only the out-neighbors will be stored
+	 *                 otherwise both directions are considered
+	 * @return a stream of Tuple3, where the first 2 fields identify the edge processed
+	 * and the third field is the adjacency list that was updated by processing this edge.
+	 */
+	public DataStream<Tuple3<K, K, TreeSet<K>>> buildNeighborhood(boolean directed) {
+
+		DataStream<Edge<K, EV>> edges = this.getEdges();
+		if (!directed) {
+			edges = this.undirected().getEdges();
+		}
+		return edges.keyBy(0).flatMap(new BuildNeighborhoods<K, EV>());
+	}
+
+	private static final class BuildNeighborhoods<K, EV> implements FlatMapFunction<Edge<K, EV>, Tuple3<K, K, TreeSet<K>>> {
+
+		Map<K, TreeSet<K>> neighborhoods = new HashMap<>();
+		Tuple3<K, K, TreeSet<K>> outTuple = new Tuple3<>();
+
+		public void flatMap(Edge<K, EV> e, Collector<Tuple3<K, K, TreeSet<K>>> out) {
+			TreeSet<K> t;
+			if (neighborhoods.containsKey(e.getSource())) {
+				t = neighborhoods.get(e.getSource());
+			} else {
+				t = new TreeSet<>();
+			}
+			t.add(e.getTarget());
+			neighborhoods.put(e.getSource(), t);
+
+			outTuple.setField(e.getSource(), 0);
+			outTuple.setField(e.getTarget(), 1);
+			outTuple.setField(t, 2);
+			out.collect(outTuple);
+		}
 	}
 
 	private static final class GlobalAggregateMapper<VV> implements FlatMapFunction<VV, VV> {

@@ -128,7 +128,7 @@ public class GraphWindowStream<K, EV> {
 	 * @return the result stream after applying the user-defined operation on the window
 	 */
 	public <T> DataStream<T> applyOnNeighbors(final EdgesApply<K, EV, T> applyFunction) {
-		return windowedStream.apply(new EdgesWindowFunction<K, EV, T>(applyFunction));
+		return windowedStream.apply(new EdgesWindowFunction<>(applyFunction));
 	}
 
 	@SuppressWarnings("serial")

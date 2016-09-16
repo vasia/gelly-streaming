@@ -22,6 +22,7 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.example.ExactTriangleCount;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
@@ -85,49 +86,6 @@ public class TriangleCountTest {
                 ;
             }
         };
-    }
-
-    @Test
-    public void testBuildNeighborhoods() throws Exception {
-        FlatMapFunction f = new ExactTriangleCount.BuildNeighborhoods();
-        TreeSet<Integer> t1 = new TreeSet<>();
-        TreeSet<Integer> t2 = new TreeSet<>();
-        TreeSet<Integer> t3 = new TreeSet<>();
-        Tuple3<Integer, Integer, TreeSet<Integer>> expected = new Tuple3<>();
-
-        f.flatMap(new Edge<>(1, 2, NullValue.getInstance()), out1);
-        t1.add(2);
-        expected.setField(1, 0);
-        expected.setField(2, 1);
-        expected.setField(t1, 2);
-        Assert.assertEquals(resultTuple1, expected);
-
-        f.flatMap(new Edge<>(1, 3, NullValue.getInstance()), out1);
-        t1.add(3);
-        expected.setField(3, 1);
-        expected.setField(t1, 2);
-        Assert.assertEquals(resultTuple1, expected);
-
-        f.flatMap(new Edge<>(2, 4, NullValue.getInstance()), out1);
-        t2.add(4);
-        expected.setField(2, 0);
-        expected.setField(4, 1);
-        expected.setField(t2, 2);
-        Assert.assertEquals(resultTuple1, expected);
-
-        f.flatMap(new Edge<>(1, 4, NullValue.getInstance()), out1);
-        t1.add(4);
-        expected.setField(1, 0);
-        expected.setField(4, 1);
-        expected.setField(t1, 2);
-        Assert.assertEquals(resultTuple1, expected);
-
-        f.flatMap(new Edge<>(3, 1, NullValue.getInstance()), out1);
-        t3.add(1);
-        expected.setField(1, 0);
-        expected.setField(3, 1);
-        expected.setField(t3, 2);
-        Assert.assertEquals(resultTuple1, expected);
     }
 
     @Test

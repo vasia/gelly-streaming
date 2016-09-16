@@ -19,6 +19,7 @@
 package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.functions.FlatMapFunction;
+import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.graph.Edge;
@@ -48,8 +49,9 @@ public class ExactTriangleCount {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 		SimpleEdgeStream<Integer, NullValue> edges = getGraphStream(env);
 
-		DataStream<Tuple2<Integer, Integer>> result = edges.undirected().getEdges()
-				.keyBy(0).flatMap(new BuildNeighborhoods())
+		DataStream<Tuple2<Integer, Integer>> result =
+				edges.buildNeighborhood(false)
+				.map(new ProjectCanonicalEdges())
 				.keyBy(0, 1).flatMap(new IntersectNeighborhoods())
 				.keyBy(0).flatMap(new SumAndEmitCounters());
 
@@ -64,30 +66,6 @@ public class ExactTriangleCount {
 	}
 
 	// *** Transformation Methods *** //
-
-	/**
-	 * Store an adjacency list per vertex and emit tuple with
-	 * the source ID, the target ID, and the current neighborhood.
-	 */
-	public static final class BuildNeighborhoods implements
-			FlatMapFunction<Edge<Integer, NullValue>, Tuple3<Integer, Integer, TreeSet<Integer>>> {
-
-		Map<Integer, TreeSet<Integer>> neighborhoods = new HashMap<>();
-
-		public void flatMap(Edge<Integer, NullValue> e, Collector<Tuple3<Integer, Integer, TreeSet<Integer>>> out) {
-			TreeSet<Integer> t;
-			if (neighborhoods.containsKey(e.getSource())) {
-				t = neighborhoods.get(e.getSource());
-			} else {
-				t = new TreeSet<>();
-			}
-			t.add(e.getTarget());
-			neighborhoods.put(e.getSource(), t);
-			int first = Math.min(e.getSource(), e.getTarget());
-			int second = Math.max(e.getSource(), e.getTarget());
-			out.collect(new Tuple3<>(first, second, t));
-		}
-	}
 
 	/**
 	 * Receives 2 tuples from the same edge (src + target) and intersects the attached neighborhoods.
@@ -152,6 +130,18 @@ public class ExactTriangleCount {
 				counts.put(t.f0, t.f1);
 				out.collect(new Tuple2<>(t.f0, t.f1));
 			}
+		}
+	}
+
+	public static final class ProjectCanonicalEdges implements
+			MapFunction<Tuple3<Integer, Integer, TreeSet<Integer>>, Tuple3<Integer, Integer, TreeSet<Integer>>> {
+		@Override
+		public Tuple3<Integer, Integer, TreeSet<Integer>> map(Tuple3<Integer, Integer, TreeSet<Integer>> t) {
+			int source = Math.min(t.f0, t.f1);
+			int trg = Math.max(t.f0, t.f1);
+			t.setField(source, 0);
+			t.setField(trg, 1);
+			return t;
 		}
 	}
 

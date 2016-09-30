@@ -18,10 +18,8 @@
 
 package org.apache.flink.graph.streaming.library;
 
-import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.graph.streaming.EdgesFold;
-import org.apache.flink.graph.streaming.GraphWindowStream;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
 import org.apache.flink.graph.streaming.example.IterativeConnectedComponents;
 import org.apache.flink.graph.streaming.example.util.DisjointSet;
@@ -112,8 +110,7 @@ public class ConnectedComponents<K extends Serializable, EV> extends WindowGraph
 		 * @param s1 The first value to combine.
 		 * @param s2 The second value to combine.
 		 * @return The combined value of both input values.
-		 * @throws Exception This method may throw exceptions. Throwing an exception will cause the operation
-		 *                   to fail and may trigger recovery.
+		 * @throws Exception This method may throw exceptions.
 		 */
 		@Override
 		public DisjointSet<K> reduce(DisjointSet<K> s1, DisjointSet<K> s2) throws Exception {

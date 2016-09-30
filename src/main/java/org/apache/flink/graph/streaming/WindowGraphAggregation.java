@@ -55,7 +55,8 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 				.map(new InitialMapper<K, EV>()).returns(typeInfo)
 				.keyBy(0)
 				.timeWindow(Time.of(timeMillis, TimeUnit.MILLISECONDS))
-				.fold(getInitialValue(), new PartialAgg<>(getUpdateFun())).flatMap(getAggregator(edgeStream)).setParallelism(1);
+				.fold(getInitialValue(), new PartialAgg<>(getUpdateFun()))
+				.flatMap(getAggregator(edgeStream)).setParallelism(1);
 
 		if (getTrasform() != null) {
 			return partialAgg.map(getTrasform());

@@ -33,7 +33,7 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.EdgeDirection;
 import org.apache.flink.graph.streaming.EdgesApply;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
-import org.apache.flink.graph.streaming.example.util.DisjointSet;
+import org.apache.flink.graph.streaming.util.DisjointSet;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;

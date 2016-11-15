@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.util;
+package org.apache.flink.graph.streaming.util;
 
 import org.junit.Before;
 import org.junit.Test;

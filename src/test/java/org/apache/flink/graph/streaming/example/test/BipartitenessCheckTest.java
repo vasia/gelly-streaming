@@ -3,7 +3,7 @@ package org.apache.flink.graph.streaming.example.test;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
-import org.apache.flink.graph.streaming.example.util.Candidates;
+import org.apache.flink.graph.streaming.util.Candidates;
 import org.apache.flink.graph.streaming.library.BipartitenessCheck;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;

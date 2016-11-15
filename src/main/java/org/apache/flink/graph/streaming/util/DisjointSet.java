@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.util;
+package org.apache.flink.graph.streaming.util;
 
 import org.apache.flink.hadoop.shaded.com.google.common.collect.Lists;
 

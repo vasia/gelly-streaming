@@ -16,27 +16,41 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.util;
+package org.apache.flink.graph.streaming.util;
 
-import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.types.NullValue;
 
-public class MatchingEvent extends Tuple2<MatchingEvent.Type, Edge<Long, Long>> {
+public class SampledEdge extends Tuple5<Integer, Integer, Edge<Long, NullValue>, Integer, Boolean> {
 
-	public enum Type {ADD, REMOVE};
+	public SampledEdge() {}
 
-	public MatchingEvent() {}
-
-	public MatchingEvent(MatchingEvent.Type type, Edge<Long, Long> edge) throws Exception {
-		this.f0 = type;
-		this.f1 = edge;
+	public SampledEdge(int subtask, int instance, Edge<Long, NullValue> edge, int edgeCount, boolean resample) throws Exception {
+		this.f0 = subtask;
+		this.f1 = instance;
+		this.f2 = edge;
+		this.f3 = edgeCount;
+		this.f4 = resample;
 	}
 
-	public MatchingEvent.Type geType() {
+	public int getSubTask() {
 		return this.f0;
 	}
 
-	public Edge<Long, Long> getEdge() {
+	public int getInstance() {
 		return this.f1;
+	}
+
+	public Edge<Long, NullValue> getEdge() {
+		return this.f2;
+	}
+
+	public int getEdgeCount() {
+		return this.f3;
+	}
+
+	public boolean isResampled() {
+		return this.f4;
 	}
 }

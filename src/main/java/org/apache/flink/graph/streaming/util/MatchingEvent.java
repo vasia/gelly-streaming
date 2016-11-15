@@ -16,29 +16,27 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.util;
+package org.apache.flink.graph.streaming.util;
 
-import org.apache.flink.api.java.tuple.Tuple3;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.Edge;
 
-public class TriangleEstimate extends Tuple3<Integer, Integer, Integer> {
+public class MatchingEvent extends Tuple2<MatchingEvent.Type, Edge<Long, Long>> {
 
-	public TriangleEstimate() {}
+	public enum Type {ADD, REMOVE};
 
-	public TriangleEstimate(int source, int edges, int beta) throws Exception {
-		this.f0 = source;
-		this.f1 = edges;
-		this.f2 = beta;
+	public MatchingEvent() {}
+
+	public MatchingEvent(MatchingEvent.Type type, Edge<Long, Long> edge) throws Exception {
+		this.f0 = type;
+		this.f1 = edge;
 	}
 
-	public int getSource() {
+	public MatchingEvent.Type geType() {
 		return this.f0;
 	}
 
-	public int getEdgeCount() {
+	public Edge<Long, Long> getEdge() {
 		return this.f1;
-	}
-
-	public int getBeta() {
-		return this.f2;
 	}
 }

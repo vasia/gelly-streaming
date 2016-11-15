@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.util;
+package org.apache.flink.graph.streaming.util;
 
 public class ExamplesTestData {
 

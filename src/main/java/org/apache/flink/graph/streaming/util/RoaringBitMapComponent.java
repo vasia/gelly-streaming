@@ -38,6 +38,11 @@ public class RoaringBitMapComponent {
         compId = id;
     }
 
+    public RoaringBitMapComponent(int compId, RoaringBitmap map) {
+        this.compId = compId;
+        this.bitMap = map;
+    }
+
     public int getComponentId() {
         return compId;
     }

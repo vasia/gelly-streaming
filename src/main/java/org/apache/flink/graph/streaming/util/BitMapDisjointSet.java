@@ -18,6 +18,8 @@
 
 package org.apache.flink.graph.streaming.util;
 
+import org.roaringbitmap.RoaringBitmap;
+
 import java.io.Serializable;
 import java.util.*;
 
@@ -44,6 +46,10 @@ public class BitMapDisjointSet implements Serializable {
         for (RoaringBitMapComponent otherComp : other.getRoaringBitmapSet()) {
             mergeComponent(otherComp);
         }
+    }
+
+    private void add(RoaringBitMapComponent other) {
+        roaringBitmapSet.add(other);
     }
 
     /**
@@ -108,6 +114,38 @@ public class BitMapDisjointSet implements Serializable {
             // remove merged component from the set
             this.roaringBitmapSet.remove(toBeMerged.get(1));
         }
+    }
+
+    public boolean isEmpty() {
+        return roaringBitmapSet.isEmpty();
+    }
+
+    // other has to be the newest state
+    public BitMapDisjointSet diff(BitMapDisjointSet other) {
+
+        BitMapDisjointSet diff = new BitMapDisjointSet();
+
+        Map<Integer, RoaringBitmap> map = new HashMap<>();
+        for (RoaringBitMapComponent c : roaringBitmapSet) {
+            map.put(c.getComponentId(), c.getBitMap());
+        }
+
+        for (RoaringBitMapComponent r : other.getRoaringBitmapSet()) {
+            if (map.containsKey(r.getComponentId())) {
+                // common component
+                if (map.get(r.getComponentId()).getCardinality() != r.getBitMap().getCardinality()) {
+                    // get different bits
+                    RoaringBitMapComponent diffBits = new RoaringBitMapComponent(r.getComponentId(), map.get(r.getComponentId()));
+                    diffBits.getBitMap().xor(r.getBitMap());
+                    diff.add(diffBits);
+                }
+            }
+            else {
+                // newly added component
+                diff.add(r);
+            }
+        }
+        return diff;
     }
 
     @Override

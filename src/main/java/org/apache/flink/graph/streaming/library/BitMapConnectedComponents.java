@@ -20,6 +20,7 @@ package org.apache.flink.graph.streaming.library;
 
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.graph.streaming.EdgesFold;
+import org.apache.flink.graph.streaming.StateFunction;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
 import org.apache.flink.graph.streaming.util.BitMapDisjointSet;
 import org.apache.flink.types.NullValue;
@@ -32,7 +33,7 @@ import java.io.Serializable;
 public class BitMapConnectedComponents extends WindowGraphAggregation<Integer, NullValue, BitMapDisjointSet, BitMapDisjointSet> implements Serializable {
 
 	public BitMapConnectedComponents(long mergeWindowTime) {
-		super(new UpdateCC(), new CombineCC(), new BitMapDisjointSet(), mergeWindowTime, false);
+		super(new UpdateCC(), new CombineCC(), new BitMapDisjointSet(), mergeWindowTime, new DiffFunction(), false);
 	}
 
 	public final static class UpdateCC implements EdgesFold<Integer, NullValue, BitMapDisjointSet> {
@@ -56,6 +57,14 @@ public class BitMapConnectedComponents extends WindowGraphAggregation<Integer, N
 			}
 			s1.merge(s2);
 			return s1;
+		}
+	}
+
+	public static class DiffFunction implements StateFunction<BitMapDisjointSet> {
+
+		@Override
+		public BitMapDisjointSet diff(BitMapDisjointSet oldState, BitMapDisjointSet newState) {
+			return oldState.diff(newState);
 		}
 	}
 }

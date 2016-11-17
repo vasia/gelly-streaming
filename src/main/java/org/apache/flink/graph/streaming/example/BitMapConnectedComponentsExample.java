@@ -51,6 +51,7 @@ public class BitMapConnectedComponentsExample implements ProgramDescription {
 
 		GraphStream<Integer, NullValue, NullValue> edges = getGraphStream(env);
 		env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime);
+		env.setParallelism(2);
 
 		DataStream<BitMapDisjointSet> cc = edges.aggregate(new BitMapConnectedComponents(mergeWindowTime));
 
@@ -141,11 +142,11 @@ public class BitMapConnectedComponentsExample implements ProgramDescription {
 		@Override
 		public void flatMap(BitMapDisjointSet set, Collector<Tuple2<Integer, Integer>> out) {
 			for (RoaringBitMapComponent comp : set.getRoaringBitmapSet()) {
-				int compId = comp.getComponentId();
-				t.setField(compId, 0);
-				for (int pos : comp.getBitMap())
-				t.setField(pos, 1);
-				out.collect(t);
+				t.setField(comp.getComponentId(), 0);
+				for (int pos : comp.getBitMap()) {
+					t.setField(pos, 1);
+					out.collect(t);
+				}
 			}
 		}
 	}

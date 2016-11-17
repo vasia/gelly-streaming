@@ -42,6 +42,17 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 		this(updateFun, combineFun, null, initialVal, timeMillis, transientState);
 	}
 
+	public WindowGraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transformFun, S initialVal, long timeMillis,
+								  StateFunction stateFun, boolean transientState) {
+		super(updateFun, combineFun, transformFun, initialVal, stateFun, transientState);
+		this.timeMillis = timeMillis;
+	}
+
+	public WindowGraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, S initialVal, long timeMillis,
+								  StateFunction stateFun, boolean transientState) {
+		this(updateFun, combineFun, null, initialVal, timeMillis, stateFun, transientState);
+	}
+
 	@SuppressWarnings("unchecked")
 	@Override
 	public DataStream<T> run(final DataStream<Edge<K, EV>> edgeStream) {

@@ -126,6 +126,8 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
             if (getWrappedFunction() != null) {
                 newState = getWrappedFunction().reduce(s, currentState);
                 if (stateDiff != null) {
+                    // TODO: we could make this FlatMapFunction return a new type O
+                    // TODO: and only output edge pairs from diff
                     collector.collect(stateDiff.diff(currentState, newState));
                 }
                 else {

@@ -8,6 +8,7 @@ import org.apache.flink.graph.Edge;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.util.Collector;
 
+import javax.swing.plaf.nimbus.State;
 import java.io.Serializable;
 
 /**
@@ -37,6 +38,8 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
      */
     private final MapFunction<S, T> trasform;
 
+    private final StateFunction<S> diffFun;
+
     private final S initialValue;
 
     /**
@@ -50,11 +53,20 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
         this.trasform = trasform;
         this.initialValue = initialValue;
         this.transientState = transientState;
+        this.diffFun = null;
     }
 
+    protected GraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> trasform, S initialValue,
+                               StateFunction<S> diffFunction, boolean transientState) {
+        this.updateFun = updateFun;
+        this.combineFun = combineFun;
+        this.trasform = trasform;
+        this.initialValue = initialValue;
+        this.transientState = transientState;
+        this.diffFun = diffFunction;
+    }
 
     public abstract DataStream<T> run(DataStream<Edge<K, EV>> edgeStream);
-
 
     public ReduceFunction<S> getCombineFun() {
         return combineFun;
@@ -68,6 +80,10 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
         return trasform;
     }
 
+    public StateFunction<S> getDiffFun() {
+        return diffFun;
+    }
+
     public boolean isTransientState() {
         return transientState;
     }
@@ -78,7 +94,7 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
 
     //FIXME - naive prototype - blocking reduce should be implemented correctly
     protected FlatMapFunction<S, S> getAggregator(final DataStream<Edge<K, EV>> edgeStream) {
-        return new Merger<>(getInitialValue(), getCombineFun(), isTransientState());
+        return new Merger<>(getInitialValue(), getCombineFun(), getDiffFun(), isTransientState());
     }
 
     /**
@@ -91,24 +107,36 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
 
         private final S initialVal;
         private S currentState;
+        private S newState;
         private final boolean transientState;
+        private final StateFunction<S> stateDiff;
 
-        private Merger(S initialVal, ReduceFunction<S> combiner, boolean transientState) {
+        private Merger(S initialVal, ReduceFunction<S> combiner, StateFunction<S> stateDiffFun, boolean transientState) {
             super(combiner);
             this.initialVal = initialVal;
             this.currentState = initialVal;
             this.transientState = transientState;
+            this.stateDiff = stateDiffFun;
+            this.newState = null;
         }
 
         @Override
         public void flatMap(S s, Collector<S> collector) throws Exception {
 
             if (getWrappedFunction() != null) {
-                currentState = getWrappedFunction().reduce(s, currentState);
-                collector.collect(currentState);
+                newState = getWrappedFunction().reduce(s, currentState);
+                if (stateDiff != null) {
+                    collector.collect(stateDiff.diff(currentState, newState));
+                }
+                else {
+                    collector.collect(newState);
+                }
 
                 if (transientState) {
                     currentState = initialVal;
+                }
+                else {
+                    currentState = newState;
                 }
             } else {
                 collector.collect(s);

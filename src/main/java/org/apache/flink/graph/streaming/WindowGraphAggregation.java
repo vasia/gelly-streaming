@@ -52,7 +52,7 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 
 		TypeInformation<Tuple2<Integer, Edge<K, EV>>> typeInfo = new TupleTypeInfo<>(BasicTypeInfo.INT_TYPE_INFO, edgeStream.getType());
 		DataStream<S> partialAgg = edgeStream
-				.map(new InitialMapper<K, EV>()).returns(typeInfo)
+				.map(new InitialMapper<>()).returns(typeInfo)
 				.keyBy(0)
 				.timeWindow(Time.of(timeMillis, TimeUnit.MILLISECONDS))
 				.fold(getInitialValue(), new PartialAgg<>(getUpdateFun()))

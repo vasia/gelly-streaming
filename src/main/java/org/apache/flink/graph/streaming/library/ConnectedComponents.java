@@ -18,10 +18,8 @@
 
 package org.apache.flink.graph.streaming.library;
 
-import org.apache.flink.api.common.functions.GroupReduceFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.graph.streaming.EdgesFold;
-import org.apache.flink.graph.streaming.GraphWindowStream;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
 import org.apache.flink.graph.streaming.example.IterativeConnectedComponents;
 import org.apache.flink.graph.streaming.example.util.DisjointSet;

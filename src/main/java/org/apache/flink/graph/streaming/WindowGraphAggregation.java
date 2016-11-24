@@ -6,6 +6,7 @@ import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.operators.translation.WrappingFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
@@ -13,7 +14,10 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
 import org.apache.flink.streaming.api.windowing.time.Time;
+import org.apache.flink.streaming.api.windowing.windows.GlobalWindow;
+import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
 import java.util.concurrent.TimeUnit;
@@ -48,14 +52,15 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 
 		//For parallel window support we key the edge stream by partition and apply a parallel fold per partition.
 		//Finally, we merge all locally combined results into our final graph aggregation property.
-
-
 		TypeInformation<Tuple2<Integer, Edge<K, EV>>> typeInfo = new TupleTypeInfo<>(BasicTypeInfo.INT_TYPE_INFO, edgeStream.getType());
 		DataStream<S> partialAgg = edgeStream
 				.map(new InitialMapper<K, EV>()).returns(typeInfo)
 				.keyBy(0)
 				.timeWindow(Time.of(timeMillis, TimeUnit.MILLISECONDS))
-				.fold(getInitialValue(), new PartialAgg<>(getUpdateFun())).flatMap(getAggregator(edgeStream)).setParallelism(1);
+				.fold(getInitialValue(), new PartialAgg<>(getUpdateFun()))
+				.countWindowAll(edgeStream.getParallelism())
+				.reduce(getCombineFun())
+				.flatMap(getAggregator()).setParallelism(1);
 
 		if (getTrasform() != null) {
 			return partialAgg.map(getTrasform());

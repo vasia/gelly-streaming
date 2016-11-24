@@ -77,7 +77,7 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
     }
 
     //FIXME - naive prototype - blocking reduce should be implemented correctly
-    protected FlatMapFunction<S, S> getAggregator(final DataStream<Edge<K, EV>> edgeStream) {
+    protected FlatMapFunction<S, S> getAggregator() {
         return new Merger<>(getInitialValue(), getCombineFun(), isTransientState());
     }
 

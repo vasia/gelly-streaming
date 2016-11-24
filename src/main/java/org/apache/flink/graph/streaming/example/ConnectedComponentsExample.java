@@ -18,6 +18,7 @@
 
 package org.apache.flink.graph.streaming.example;
 
+import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.api.common.ProgramDescription;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.FoldFunction;
@@ -32,10 +33,14 @@ import org.apache.flink.graph.streaming.library.ConnectedComponents;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;
+import org.apache.flink.streaming.api.functions.sink.SinkFunction;
+import org.apache.flink.streaming.api.functions.source.ParallelSourceFunction;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
 
+import java.util.PrimitiveIterator;
+import java.util.SplittableRandom;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -50,23 +55,26 @@ public class ConnectedComponentsExample implements ProgramDescription {
 
 	public static void main(String[] args) throws Exception {
 
-		if (!parseParameters(args)) {
-			return;
-		}
+		final Integer mergeWindowTime = 50000;
+		final int numVertices = 1000000;
+		final int numEdges = 500000000;
+		final int numTasks = 4;
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+		env.getConfig().disableSysoutLogging();
+		env.setParallelism(numTasks);
 
-		GraphStream<Long, NullValue, NullValue> edges = getGraphStream(env);
+		GraphStream<Long, NullValue, NullValue> edges = getRandomGraphStream(env, numEdges, numTasks, numVertices);
 
 		DataStream<DisjointSet<Long>> cc = edges.aggregate(new ConnectedComponents<Long, NullValue>(mergeWindowTime));
 
-		// flatten the elements of the disjoint set and print
-		// in windows of printWindowTime
-		cc.flatMap(new FlattenSet()).keyBy(0)
-				.timeWindow(Time.of(printWindowTime, TimeUnit.MILLISECONDS))
-				.fold(new Tuple2<Long, Long>(0l, 0l), new IdentityFold()).print();
+		cc.addSink(new SinkFunction() {
+			public void invoke(Object value) throws Exception {
+			}
+		});
 
-		env.execute("Streaming Connected Components");
+		JobExecutionResult res = env.execute("Streaming Connected Components");
+		System.out.println("time: " + res.getNetRuntime());
 	}
 
 	// *************************************************************************
@@ -102,11 +110,38 @@ public class ConnectedComponentsExample implements ProgramDescription {
 	}
 
 
+	private static GraphStream<Long, NullValue, NullValue> getRandomGraphStream(StreamExecutionEnvironment env,
+		final int numEdges, final int numTasks, final int numVertices) {
+
+		DataStream<Edge<Long, NullValue>> edgeStream = env.addSource(new ParallelSourceFunction<Edge<Long, NullValue>>() {
+			public void run(SourceContext<Edge<Long, NullValue>> ctx) throws Exception {
+
+				final SplittableRandom rand = new SplittableRandom();
+				final int totalEdges = numEdges / numTasks;
+				PrimitiveIterator.OfInt randStr = rand.ints(totalEdges, 0, numVertices).iterator();
+				final Edge<Long, NullValue> out = new Edge<>();
+				out.setField(NullValue.getInstance(), 2);
+				while (randStr.hasNext()) {
+					out.setField(Long.valueOf(randStr.nextInt()), 0);
+					out.setField(Long.valueOf(randStr.nextInt()), 1);
+					ctx.collect(out);
+				}
+			}
+
+			@Override
+			public void cancel() {
+			}
+
+		});
+		return new SimpleEdgeStream<>(edgeStream, env);
+	}
+
+
 	@SuppressWarnings("serial")
 	private static GraphStream<Long, NullValue, NullValue> getGraphStream(StreamExecutionEnvironment env) {
 
 		if (fileOutput) {
-			return new SimpleEdgeStream<Long, NullValue>(env.readTextFile(edgeInputPath)
+			return new SimpleEdgeStream<>(env.readTextFile(edgeInputPath)
 					.map(new MapFunction<String, Edge<Long, NullValue>>() {
 						@Override
 						public Edge<Long, NullValue> map(String s) {

@@ -64,7 +64,7 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
         return updateFun;
     }
 
-    public MapFunction<S, T> getTrasform() {
+    public MapFunction<S, T> getTransform() {
         return transform;
     }
 

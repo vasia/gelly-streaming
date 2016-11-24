@@ -44,10 +44,10 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
      */
     private final boolean transientState;
 
-    protected GraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> trasform, S initialValue, boolean transientState) {
+    protected GraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transform, S initialValue, boolean transientState) {
         this.updateFun = updateFun;
         this.combineFun = combineFun;
-        this.trasform = trasform;
+        this.trasform = transform;
         this.initialValue = initialValue;
         this.transientState = transientState;
     }
@@ -64,7 +64,7 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
         return updateFun;
     }
 
-    public MapFunction<S, T> getTrasform() {
+    public MapFunction<S, T> getTransform() {
         return trasform;
     }
 

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.util;
+package org.apache.flink.graph.streaming.summaries;
 
 import java.io.Serializable;
 import java.util.*;
@@ -124,7 +124,7 @@ public class AdjacencyListGraph<K extends Comparable<K>> implements Serializable
         private K id;
         private int level;
 
-        public Node(K id, int level) {
+        Node(K id, int level) {
             this.id = id;
             this.level = level;
         }
@@ -133,7 +133,7 @@ public class AdjacencyListGraph<K extends Comparable<K>> implements Serializable
             return id;
         }
 
-        public int getLevel() {
+        int getLevel() {
             return level;
         }
     }

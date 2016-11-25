@@ -21,7 +21,7 @@ package org.apache.flink.graph.streaming.library;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.graph.streaming.EdgesFold;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
-import org.apache.flink.graph.streaming.example.util.AdjacencyListGraph;
+import org.apache.flink.graph.streaming.summaries.AdjacencyListGraph;
 import org.apache.flink.types.NullValue;
 
 import java.io.Serializable;
@@ -80,9 +80,6 @@ public class Spanner<K extends Comparable<K>, EV> extends WindowGraphAggregation
 	/**
 	 * Merge the local spanners of each partition into the global spanner.
 	 */
-	// TODO: having a reduce as a combine we cannot return only the delta, i.e. new added edges
-	// TODO: we have to output the whole spanner after every window trigger
-	// TODO: we either have to separately store the delta or change the aggregation behavior
 	public static class CombineSpanners<K extends Comparable<K>> implements ReduceFunction<AdjacencyListGraph<K>> {
 
 		private final int factorK;

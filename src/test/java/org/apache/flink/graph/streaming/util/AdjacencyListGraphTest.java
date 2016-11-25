@@ -16,8 +16,9 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.util;
+package org.apache.flink.graph.streaming.util;
 
+import org.apache.flink.graph.streaming.summaries.AdjacencyListGraph;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;

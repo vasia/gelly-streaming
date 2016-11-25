@@ -21,8 +21,8 @@ package org.apache.flink.graph.streaming.library;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.graph.streaming.EdgesFold;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
-import org.apache.flink.graph.streaming.example.util.Candidates;
-import org.apache.flink.graph.streaming.example.util.SignedVertex;
+import org.apache.flink.graph.streaming.summaries.Candidates;
+import org.apache.flink.graph.streaming.util.SignedVertex;
 import org.apache.flink.types.NullValue;
 
 import java.io.Serializable;

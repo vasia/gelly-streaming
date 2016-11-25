@@ -16,9 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.util;
+package org.apache.flink.graph.streaming.summaries;
 
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.graph.streaming.util.SignedVertex;
 
 import java.io.Serializable;
 import java.util.*;

@@ -16,41 +16,29 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.util;
+package org.apache.flink.graph.streaming.util;
 
-import org.apache.flink.api.java.tuple.Tuple5;
-import org.apache.flink.graph.Edge;
-import org.apache.flink.types.NullValue;
+import org.apache.flink.api.java.tuple.Tuple3;
 
-public class SampledEdge extends Tuple5<Integer, Integer, Edge<Long, NullValue>, Integer, Boolean> {
+public class TriangleEstimate extends Tuple3<Integer, Integer, Integer> {
 
-	public SampledEdge() {}
+	public TriangleEstimate() {}
 
-	public SampledEdge(int subtask, int instance, Edge<Long, NullValue> edge, int edgeCount, boolean resample) throws Exception {
-		this.f0 = subtask;
-		this.f1 = instance;
-		this.f2 = edge;
-		this.f3 = edgeCount;
-		this.f4 = resample;
+	public TriangleEstimate(int source, int edges, int beta) throws Exception {
+		this.f0 = source;
+		this.f1 = edges;
+		this.f2 = beta;
 	}
 
-	public int getSubTask() {
+	public int getSource() {
 		return this.f0;
 	}
 
-	public int getInstance() {
+	public int getEdgeCount() {
 		return this.f1;
 	}
 
-	public Edge<Long, NullValue> getEdge() {
+	public int getBeta() {
 		return this.f2;
-	}
-
-	public int getEdgeCount() {
-		return this.f3;
-	}
-
-	public boolean isResampled() {
-		return this.f4;
 	}
 }

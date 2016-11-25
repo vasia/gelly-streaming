@@ -62,6 +62,7 @@ stateful operators in the execution graph.
 ## Graph Streaming Algorithms
 
 * Connected Components
+* k-Spanner
 * Bipartiteness Check
 * Window Triangle Count
 * Triangle Count Estimation

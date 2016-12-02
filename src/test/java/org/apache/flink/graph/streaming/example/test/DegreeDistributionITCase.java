@@ -18,7 +18,6 @@
 package org.apache.flink.graph.streaming.example.test;
 
 import org.apache.flink.graph.streaming.example.DegreeDistribution;
-import org.apache.flink.graph.streaming.example.WindowTriangles;
 import org.apache.flink.graph.streaming.example.util.ExamplesTestData;
 import org.apache.flink.streaming.util.StreamingProgramTestBase;
 

@@ -1,3 +1,22 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+
 package org.apache.flink.graph.streaming;
 
 import org.apache.flink.api.common.functions.FoldFunction;
@@ -30,7 +49,7 @@ import java.util.concurrent.TimeUnit;
 public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends GraphAggregation<K, EV, S, T> {
 
 	private static final long serialVersionUID = 1L;
-	private long timeMillis;
+	protected long timeMillis;
 
 
 	public WindowGraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transformFun, S initialVal, long timeMillis, boolean transientState) {
@@ -48,14 +67,15 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 
 		//For parallel window support we key the edge stream by partition and apply a parallel fold per partition.
 		//Finally, we merge all locally combined results into our final graph aggregation property.
-
+		TupleTypeInfo edgeTypeInfo = (TupleTypeInfo) edgeStream.getType();
+		TypeInformation<S> returnType = TypeExtractor.createTypeInfo(EdgesFold.class, getUpdateFun().getClass(), 2, edgeTypeInfo.getTypeAt(0), edgeTypeInfo.getTypeAt(2));
 
 		TypeInformation<Tuple2<Integer, Edge<K, EV>>> typeInfo = new TupleTypeInfo<>(BasicTypeInfo.INT_TYPE_INFO, edgeStream.getType());
 		DataStream<S> partialAgg = edgeStream
-				.map(new InitialMapper<>()).returns(typeInfo)
+				.map(new PartitionMapper<>()).returns(typeInfo)
 				.keyBy(0)
 				.timeWindow(Time.of(timeMillis, TimeUnit.MILLISECONDS))
-				.fold(getInitialValue(), new PartialAgg<>(getUpdateFun()))
+				.fold(getInitialValue(), new PartialAgg<>(getUpdateFun(),returnType))
 				.timeWindowAll(Time.of(timeMillis, TimeUnit.MILLISECONDS))
 				.reduce(getCombineFun())
 				.flatMap(getAggregator(edgeStream)).setParallelism(1);
@@ -68,7 +88,7 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 	}
 
 	@SuppressWarnings("serial")
-	private static final class InitialMapper<K, EV> extends RichMapFunction<Edge<K, EV>, Tuple2<Integer, Edge<K, EV>>> {
+	protected static final class PartitionMapper<Y> extends RichMapFunction<Y, Tuple2<Integer, Y>> {
 
 		private int partitionIndex;
 
@@ -78,19 +98,21 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 		}
 
 		@Override
-		public Tuple2<Integer, Edge<K, EV>> map(Edge<K, EV> edge) throws Exception {
-			return new Tuple2<>(partitionIndex, edge);
+		public Tuple2<Integer, Y> map(Y state) throws Exception {
+			return new Tuple2<>(partitionIndex, state);
 		}
 	}
 
 	@SuppressWarnings("serial")
-	private static final class PartialAgg<K, EV, S>
+	protected static final class PartialAgg<K, EV, S>
 			implements ResultTypeQueryable<S>, FoldFunction<Tuple2<Integer, Edge<K, EV>>, S> {
 
 		private EdgesFold<K, EV, S> foldFunction;
+		private TypeInformation<S> returnType;
 
-		public PartialAgg(EdgesFold<K, EV, S> foldFunction) {
+		public PartialAgg(EdgesFold<K, EV, S> foldFunction, TypeInformation<S> returnType) {
 			this.foldFunction = foldFunction;
+			this.returnType = returnType;
 		}
 
 		@Override
@@ -100,8 +122,7 @@ public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends Gr
 
 		@Override
 		public TypeInformation<S> getProducedType() {
-			return TypeExtractor.createTypeInfo(EdgesFold.class, this.foldFunction.getClass(), 2,
-					null, null);
+			return returnType;
 		}
 
 	}

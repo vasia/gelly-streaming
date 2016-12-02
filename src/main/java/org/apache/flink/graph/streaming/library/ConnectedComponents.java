@@ -94,7 +94,7 @@ public class ConnectedComponents<K extends Serializable, EV> extends WindowGraph
 	 * In this case the values of the vertices belonging to Connected Components form
 	 * each window are merged to find the Connected Components for the whole graph.
 	 */
-	public static class CombineCC<K extends Serializable> implements ReduceFunction<DisjointSet<K>> {
+		public static class CombineCC<K extends Serializable> implements ReduceFunction<DisjointSet<K>> {
 
 		/**
 		 * Implements reduce method of ReduceFunction interface.

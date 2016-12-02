@@ -26,6 +26,7 @@ import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.WindowGraphAggregation;
 import org.apache.flink.graph.streaming.example.util.DisjointSet;
 import org.apache.flink.graph.streaming.library.ConnectedComponents;
+import org.apache.flink.graph.streaming.library.ConnectedComponentsTree;
 import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -48,25 +49,27 @@ public class ConnectedComponentsExample implements ProgramDescription {
 
 	public static void main(String[] args) throws Exception {
 
-		final Integer mergeWindowTime = 2000;
-		final int numVertices = 1000000;
-		final int numEdges = 10000000;
+		final Integer mergeWindowTime = 5000;
+		final int numVertices = 100000;
+		final int numEdges = 100000000;
 		final int numTasks = 4;
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		env.setStreamTimeCharacteristic(TimeCharacteristic.ProcessingTime);
+		env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
 		env.getConfig().disableSysoutLogging();
 		env.setParallelism(numTasks);
 
 		GraphStream<Integer, NullValue, NullValue> edges = getRandomGraphStream(env, numEdges, numTasks, numVertices);
 
 		DataStream<DisjointSet<Integer>> cc = edges.aggregate(new ConnectedComponents<>(mergeWindowTime));
+//		DataStream<DisjointSet<Integer>> cc = edges.aggregate(new ConnectedComponentsTree<>(mergeWindowTime));
 
 		cc.addSink(new SinkFunction() {
 			public void invoke(Object value) throws Exception {
 			}
-		});
+		}).setParallelism(1);
 
+		System.out.println(env.getExecutionPlan());
 		JobExecutionResult res = env.execute("Streaming Connected Components");
 		System.out.println("time: " + res.getNetRuntime());
 	}

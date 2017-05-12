@@ -24,7 +24,7 @@ import org.apache.flink.api.common.functions.Function;
 
 /**
  * Interface to be implemented by the function applied to a vertex neighborhood
- * in the {@link GraphWindowStream#foldNeighbors(Object, EdgesFold)} method.
+ * in the {@link SnapshotStream#foldNeighbors(Object, EdgesFold)} method.
  *
  * @param <K> the vertex ID type
  * @param <EV> the edge value type

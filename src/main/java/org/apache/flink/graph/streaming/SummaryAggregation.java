@@ -5,10 +5,13 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.java.operators.translation.WrappingFunction;
 import org.apache.flink.graph.Edge;
+import org.apache.flink.streaming.api.checkpoint.ListCheckpointed;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.util.Collector;
 
 import java.io.Serializable;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * @param <K>  key type
@@ -16,7 +19,7 @@ import java.io.Serializable;
  * @param <S>  intermediate state type
  * @param <T>  fold result type
  */
-public abstract class GraphAggregation<K, EV, S extends Serializable, T> implements Serializable {
+public abstract class SummaryAggregation<K, EV, S extends Serializable, T> implements Serializable {
 
 	private static final long serialVersionUID = 1L;
 
@@ -44,7 +47,7 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
      */
     private final boolean transientState;
 
-    protected GraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transform, S initialValue, boolean transientState) {
+    protected SummaryAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transform, S initialValue, boolean transientState) {
         this.updateFun = updateFun;
         this.combineFun = combineFun;
         this.transform = transform;
@@ -87,16 +90,16 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
      * @param <S>
      */
     @SuppressWarnings("serial")
-	private final static class Merger<S> extends WrappingFunction<ReduceFunction<S>> implements FlatMapFunction<S, S> {
+	private final static class Merger<S extends Serializable> extends WrappingFunction<ReduceFunction<S>> implements FlatMapFunction<S, S>, ListCheckpointed<S> {
 
         private final S initialVal;
-        private S currentState;
+        private S summary;
         private final boolean transientState;
 
         private Merger(S initialVal, ReduceFunction<S> combiner, boolean transientState) {
             super(combiner);
             this.initialVal = initialVal;
-            this.currentState = initialVal;
+            this.summary = initialVal;
             this.transientState = transientState;
         }
 
@@ -104,15 +107,31 @@ public abstract class GraphAggregation<K, EV, S extends Serializable, T> impleme
         public void flatMap(S s, Collector<S> collector) throws Exception {
 
             if (getWrappedFunction() != null) {
-                currentState = getWrappedFunction().reduce(s, currentState);
-                collector.collect(currentState);
+                summary = getWrappedFunction().reduce(s, summary);
+                collector.collect(summary);
 
                 if (transientState) {
-                    currentState = initialVal;
+                    summary = initialVal;
                 }
             } else {
                 collector.collect(s);
             }
+        }
+
+        /**
+         * Graph state is task-parallel, thus, we use operator state.
+         * 
+         * TODO In the future we can change the redistribution strategy to split a summary and repartition it customly
+         *
+         */
+        @Override
+        public List<S> snapshotState(long l, long l1) throws Exception {
+            return Collections.singletonList(summary);
+        }
+
+        @Override
+        public void restoreState(List<S> list) throws Exception {
+            summary = list.get(0);
         }
     }
 }

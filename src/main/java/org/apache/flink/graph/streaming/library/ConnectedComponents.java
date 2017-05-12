@@ -20,7 +20,7 @@ package org.apache.flink.graph.streaming.library;
 
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.graph.streaming.EdgesFold;
-import org.apache.flink.graph.streaming.WindowGraphAggregation;
+import org.apache.flink.graph.streaming.SummaryBulkAggregation;
 import org.apache.flink.graph.streaming.example.IterativeConnectedComponents;
 import org.apache.flink.graph.streaming.summaries.DisjointSet;
 import org.apache.flink.types.NullValue;
@@ -32,13 +32,13 @@ import java.io.Serializable;
  * Vertices that belong to the same component have the same component ID.
  * This algorithm computes _weakly_ connected components, i.e. edge direction is ignored.
  * <p>
- * This is a single-pass implementation, which uses a {@link WindowGraphAggregation} to periodically merge
+ * This is a single-pass implementation, which uses a {@link SummaryBulkAggregation} to periodically merge
  * the partitioned state. For an iterative implementation, see {@link IterativeConnectedComponents}.
  *
  * @param <K>  the vertex ID type
  * @param <EV> the edge value type
  */
-public class ConnectedComponents<K extends Serializable, EV> extends WindowGraphAggregation<K, EV, DisjointSet<K>, DisjointSet<K>> implements Serializable {
+public class ConnectedComponents<K extends Serializable, EV> extends SummaryBulkAggregation<K, EV, DisjointSet<K>, DisjointSet<K>> implements Serializable {
 
 	/**
 	 * Creates a ConnectedComponents object using WindowGraphAggregation class.

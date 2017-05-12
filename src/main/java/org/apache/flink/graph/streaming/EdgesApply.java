@@ -26,7 +26,7 @@ import org.apache.flink.util.Collector;
 
 /**
  * Interface to be implemented by the function applied to a vertex neighborhood
- * in the {@link GraphWindowStream#applyOnNeighbors(EdgesApply)} method.
+ * in the {@link SnapshotStream#applyOnNeighbors(EdgesApply)} method.
  *
  * @param <K> the vertex ID type
  * @param <EV> the edge value type

@@ -23,7 +23,6 @@ import java.util.Iterator;
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
-import org.apache.flink.api.java.operators.translation.WrappingFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
@@ -39,16 +38,16 @@ import org.apache.flink.util.Collector;
  * the graph state of the edges contained in the respective window.
  * It is created by calling {@link SimpleEdgeStream#slice()}.
  * The graph slice is keyed by the source or target vertex of the edge stream,
- * so that all edges of a vertex are in the same window.
+ * so that all edges of a vertex are in the same tumbling window.
  *
  * @param <K> the vertex ID type
  * @param <EV> the edge value type
  */
-public class GraphWindowStream<K, EV> {
+public class SnapshotStream<K, EV> {
 
 	private WindowedStream<Edge<K, EV>, K, TimeWindow> windowedStream;
 
-	GraphWindowStream(WindowedStream<Edge<K, EV>, K, TimeWindow> window) {
+	SnapshotStream(WindowedStream<Edge<K, EV>, K, TimeWindow> window) {
 		this.windowedStream = window;
 	}
 
@@ -87,7 +86,7 @@ public class GraphWindowStream<K, EV> {
 	}
 
 	/**
-	 * Performs an aggregation on the neighboring edges of each vertex on the graph window stream.
+//	 * Performs an aggregation on the neighboring edges of each vertex on the graph window stream.
 	 * <p>
 	 * For each vertex, the transformation consecutively calls a
 	 * {@link EdgesReduce} function until only a single value for each edge remains.
@@ -128,16 +127,16 @@ public class GraphWindowStream<K, EV> {
 	 * @return the result stream after applying the user-defined operation on the window
 	 */
 	public <T> DataStream<T> applyOnNeighbors(final EdgesApply<K, EV, T> applyFunction) {
-		return windowedStream.apply(new EdgesWindowFunction<>(applyFunction));
+		return windowedStream.apply(new SnapshotFunction<>(applyFunction));
 	}
 
 	@SuppressWarnings("serial")
-	public static final class EdgesWindowFunction<K, EV, T> implements
+	public static final class SnapshotFunction<K, EV, T> implements
 			WindowFunction<Edge<K, EV>, T, K, TimeWindow>, ResultTypeQueryable<T> {
 
 		private final EdgesApply<K, EV, T> applyFunction;
 
-		public EdgesWindowFunction(EdgesApply<K, EV, T> applyFunction) {
+		public SnapshotFunction(EdgesApply<K, EV, T> applyFunction) {
 			this.applyFunction = applyFunction;
 		}
 

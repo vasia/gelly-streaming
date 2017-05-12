@@ -20,7 +20,7 @@ package org.apache.flink.graph.streaming.library;
 
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.graph.streaming.EdgesFold;
-import org.apache.flink.graph.streaming.WindowGraphAggregation;
+import org.apache.flink.graph.streaming.SummaryBulkAggregation;
 import org.apache.flink.graph.streaming.summaries.AdjacencyListGraph;
 import org.apache.flink.types.NullValue;
 
@@ -31,13 +31,13 @@ import java.io.Serializable;
  * The user-defined parameter k defines the distance estimation error,
  * i.e. a k-spanner preserves all distances with a factor of up to k.
  * <p>
- * This is a single-pass implementation, which uses a {@link WindowGraphAggregation} to periodically merge
+ * This is a single-pass implementation, which uses a {@link SummaryBulkAggregation} to periodically merge
  * the partitioned state.
  *
  * @param <K>  the vertex ID type
  * @param <EV> the edge value type
  */
-public class Spanner<K extends Comparable<K>, EV> extends WindowGraphAggregation<K, EV, AdjacencyListGraph<K>, AdjacencyListGraph<K>> implements Serializable {
+public class Spanner<K extends Comparable<K>, EV> extends SummaryBulkAggregation<K, EV, AdjacencyListGraph<K>, AdjacencyListGraph<K>> implements Serializable {
 
 	private final int k;
 

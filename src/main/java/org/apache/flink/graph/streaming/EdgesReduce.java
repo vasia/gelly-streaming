@@ -24,7 +24,7 @@ import org.apache.flink.api.common.functions.Function;
 
 /**
  * Interface to be implemented by the function applied to a vertex neighborhood
- * in the {@link GraphWindowStream#reduceOnEdges(EdgesReduce)} method.
+ * in the {@link SnapshotStream#reduceOnEdges(EdgesReduce)} method.
  *
  * @param <EV> the edge value type
  */

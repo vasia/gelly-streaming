@@ -92,13 +92,13 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	/**
 	 * Applies an incremental aggregation on a graphstream and returns a stream of aggregation results 
 	 * 
-	 * @param graphAggregation
+	 * @param summaryAggregation
 	 * @param <S>
 	 * @param <T>
      * @return
      */
-	public <S extends Serializable, T> DataStream<T> aggregate(GraphAggregation<K,EV,S,T> graphAggregation) {
-		return graphAggregation.run(getEdges());//FIXME
+	public <S extends Serializable, T> DataStream<T> aggregate(SummaryAggregation<K,EV,S,T> summaryAggregation) {
+		return summaryAggregation.run(getEdges());//FIXME
 	}
 	
 	/**
@@ -132,7 +132,7 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 * @param size the size of the window
 	 * @return a GraphWindowStream of the specified size 
 	 */
-	public GraphWindowStream<K, EV> slice(Time size) {
+	public SnapshotStream<K, EV> slice(Time size) {
 		return slice(size, EdgeDirection.OUT);
 	}
 
@@ -146,19 +146,19 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 * @param direction the EdgeDirection to key by
 	 * @return a GraphWindowStream of the specified size, keyed by
 	 */
-	public GraphWindowStream<K, EV> slice(Time size, EdgeDirection direction)
+	public SnapshotStream<K, EV> slice(Time size, EdgeDirection direction)
 		throws IllegalArgumentException {
 
 		switch (direction) {
 		case IN:
-			return new GraphWindowStream<K, EV>(
+			return new SnapshotStream<K, EV>(
 				this.reverse().getEdges().keyBy(new NeighborKeySelector<K, EV>(0)).timeWindow(size));
 		case OUT:
-			return new GraphWindowStream<K, EV>(
+			return new SnapshotStream<K, EV>(
 				getEdges().keyBy(new NeighborKeySelector<K, EV>(0)).timeWindow(size));
 		case ALL:
 			getEdges().keyBy(0).timeWindow(size);
-			return new GraphWindowStream<K, EV>(
+			return new SnapshotStream<K, EV>(
 				this.undirected().getEdges().keyBy(
 					new NeighborKeySelector<K, EV>(0)).timeWindow(size));
 		default:

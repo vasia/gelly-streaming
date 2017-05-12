@@ -26,7 +26,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
-import org.apache.flink.graph.streaming.WindowGraphAggregation;
+import org.apache.flink.graph.streaming.SummaryBulkAggregation;
 import org.apache.flink.graph.streaming.library.Spanner;
 import org.apache.flink.graph.streaming.summaries.AdjacencyListGraph;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -43,7 +43,7 @@ import java.util.concurrent.TimeUnit;
  * The user-defined parameter k defines the distance estimation error,
  * i.e. a k-spanner preserves all distances with a factor of up to k.
  * <p>
- * This is a single-pass implementation, which uses a {@link WindowGraphAggregation} to periodically merge
+ * This is a single-pass implementation, which uses a {@link SummaryBulkAggregation} to periodically merge
  * the partitioned state.
  */
 public class SpannerExample implements ProgramDescription {

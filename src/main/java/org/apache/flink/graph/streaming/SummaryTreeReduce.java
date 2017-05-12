@@ -44,22 +44,22 @@ import java.util.concurrent.TimeUnit;
  * TODO add documentation
  * 
  */
-public class WindowGraphTreeAggregation<K, EV, S extends Serializable, T> extends WindowGraphAggregation<K, EV, S, T> {
+public class SummaryTreeReduce<K, EV, S extends Serializable, T> extends SummaryBulkAggregation<K, EV, S, T> {
 
 	private static final long serialVersionUID = 1L;
 	private int degree;
 	
 
-	public WindowGraphTreeAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transformFun, S initialVal, long timeMillis, boolean transientState, int degree) {
+	public SummaryTreeReduce(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transformFun, S initialVal, long timeMillis, boolean transientState, int degree) {
 		super(updateFun, combineFun, transformFun, initialVal, timeMillis, transientState);
 		this.degree = degree;
 	}
 
-	public WindowGraphTreeAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, S initialVal, long timeMillis, boolean transientState, int degree) {
+	public SummaryTreeReduce(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, S initialVal, long timeMillis, boolean transientState, int degree) {
 		this(updateFun, combineFun, null, initialVal, timeMillis, transientState, degree);
 	}
 
-	public WindowGraphTreeAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, S initialVal, long timeMillis, boolean transientState) {
+	public SummaryTreeReduce(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, S initialVal, long timeMillis, boolean transientState) {
 		this(updateFun, combineFun, null, initialVal, timeMillis, transientState, -1);
 	}
 

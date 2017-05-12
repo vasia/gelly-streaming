@@ -48,18 +48,18 @@ import java.util.concurrent.TimeUnit;
  * @param <S> the output type of the partial aggregation
  * @param <T> the output type of the result
  */
-public class WindowGraphAggregation<K, EV, S extends Serializable, T> extends GraphAggregation<K, EV, S, T> {
+public class SummaryBulkAggregation<K, EV, S extends Serializable, T> extends SummaryAggregation<K, EV, S, T> {
 
 	private static final long serialVersionUID = 1L;
 	protected long timeMillis;
 
 
-	public WindowGraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transformFun, S initialVal, long timeMillis, boolean transientState) {
+	public SummaryBulkAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, MapFunction<S, T> transformFun, S initialVal, long timeMillis, boolean transientState) {
 		super(updateFun, combineFun, transformFun, initialVal, transientState);
 		this.timeMillis = timeMillis;
 	}
 
-	public WindowGraphAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, S initialVal, long timeMillis, boolean transientState) {
+	public SummaryBulkAggregation(EdgesFold<K, EV, S> updateFun, ReduceFunction<S> combineFun, S initialVal, long timeMillis, boolean transientState) {
 		this(updateFun, combineFun, null, initialVal, timeMillis, transientState);
 	}
 

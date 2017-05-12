@@ -18,12 +18,12 @@
 
 package org.apache.flink.graph.streaming.library;
 
-import org.apache.flink.graph.streaming.WindowGraphTreeAggregation;
+import org.apache.flink.graph.streaming.SummaryTreeReduce;
 import org.apache.flink.graph.streaming.summaries.DisjointSet;
 
 import java.io.Serializable;
 
-public class ConnectedComponentsTree<K extends Serializable, EV> extends WindowGraphTreeAggregation<K, EV, DisjointSet<K>, DisjointSet<K>> implements Serializable {
+public class ConnectedComponentsTree<K extends Serializable, EV> extends SummaryTreeReduce<K, EV, DisjointSet<K>, DisjointSet<K>> implements Serializable {
 
 	public ConnectedComponentsTree(long mergeWindowTime, int degree) {
 		super(new ConnectedComponents.UpdateCC(), new ConnectedComponents.CombineCC(), new DisjointSet<K>(), mergeWindowTime, false, degree);

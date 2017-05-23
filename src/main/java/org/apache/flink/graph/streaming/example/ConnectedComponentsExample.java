@@ -64,7 +64,7 @@ public class ConnectedComponentsExample implements ProgramDescription {
 		// in windows of printWindowTime
 		cc.flatMap(new FlattenSet()).keyBy(0)
 				.timeWindow(Time.of(printWindowTime, TimeUnit.MILLISECONDS))
-				.fold(new Tuple2<Long, Long>(0l, 0l), new IdentityFold()).print();
+				.fold(new Tuple2<>(0l, 0l), new IdentityFold()).print();
 
 		env.execute("Streaming Connected Components");
 	}

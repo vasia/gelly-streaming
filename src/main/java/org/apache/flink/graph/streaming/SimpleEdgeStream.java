@@ -133,7 +133,7 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 * @return a GraphWindowStream of the specified size 
 	 */
 	public SnapshotStream<K, EV> slice(Time size) {
-		return slice(size, EdgeDirection.OUT);
+		return slice(size, EdgeDirection.ALL);
 	}
 
 	/**
@@ -151,16 +151,16 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 
 		switch (direction) {
 		case IN:
-			return new SnapshotStream<K, EV>(
-				this.reverse().getEdges().keyBy(new NeighborKeySelector<K, EV>(0)).timeWindow(size));
+			return new SnapshotStream<K,EV>(
+					this.reverse().getEdges().keyBy(new NeighborKeySelector<>(0)).timeWindow(size), size);
 		case OUT:
-			return new SnapshotStream<K, EV>(
-				getEdges().keyBy(new NeighborKeySelector<K, EV>(0)).timeWindow(size));
+			return new SnapshotStream<K,EV>(
+					getEdges().keyBy(new NeighborKeySelector<>(0)).timeWindow(size), size);
 		case ALL:
 			getEdges().keyBy(0).timeWindow(size);
-			return new SnapshotStream<K, EV>(
-				this.undirected().getEdges().keyBy(
-					new NeighborKeySelector<K, EV>(0)).timeWindow(size));
+			return new SnapshotStream<K,EV>(
+					this.undirected().getEdges().keyBy(
+							new NeighborKeySelector<>(0)).timeWindow(size), size);
 		default:
 			throw new IllegalArgumentException("Illegal edge direction");
 		}
@@ -256,7 +256,7 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	@Override
 	public SimpleEdgeStream<K, EV> filterVertices(FilterFunction<Vertex<K, NullValue>> filter) {
 		DataStream<Edge<K, EV>> remainingEdges = this.edges
-				.filter(new ApplyVertexFilterToEdges<K, EV>(filter));
+				.filter(new ApplyVertexFilterToEdges<>(filter));
 
 		return new SimpleEdgeStream<>(remainingEdges, this.context);
 	}
@@ -386,7 +386,7 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 * @return a data stream representing the number of all edges in the streamed graph, including possible duplicates
 	 */
 	public DataStream<Long> numberOfEdges() {
-		return this.edges.map(new TotalEdgeCountMapper<K, EV>()).setParallelism(1);
+		return this.edges.map(new TotalEdgeCountMapper<>()).setParallelism(1);
 	}
 
 	private static final class TotalEdgeCountMapper<K, EV> implements MapFunction<Edge<K, EV>, Long> {
@@ -411,8 +411,8 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 	 */
 	@Override
 	public DataStream<Vertex<K, Long>> getDegrees() throws Exception {
-		return this.aggregate(new DegreeTypeSeparator<K, EV>(true, true),
-				new DegreeMapFunction<K>());
+		return this.aggregate(new DegreeTypeSeparator<>(true, true),
+				new DegreeMapFunction<>());
 	}
 
 	/**
@@ -534,7 +534,7 @@ public class SimpleEdgeStream<K, EV> extends GraphStream<K, NullValue, EV> {
 		if (!directed) {
 			edges = this.undirected().getEdges();
 		}
-		return edges.keyBy(0).flatMap(new BuildNeighborhoods<K, EV>());
+		return edges.keyBy(0).flatMap(new BuildNeighborhoods<>());
 	}
 
 	private static final class BuildNeighborhoods<K, EV> implements FlatMapFunction<Edge<K, EV>, Tuple3<K, K, TreeSet<K>>> {

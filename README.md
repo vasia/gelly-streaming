@@ -50,7 +50,7 @@ stateful operators in the execution dataflow.
 
 ### Discretization
 
-* `slice`: Discretizes the edge stream into tumbling windows of the specified size.
+* `slice`: Discretizes the edge stream into tumbling windows of the specified snapshotGranularity.
 
 #### Neighborhood Aggregations
 

@@ -19,13 +19,13 @@
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-gelly_2.10</artifactId>
-            <version>1.2.0</version>
+            <version>1.2-WATERMARKS</version>
         </dependency>
 
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-streaming-java_2.10</artifactId>
-            <version>1.2.0</version>
+            <version>1.2-WATERMARKS</version>
         </dependency>
 
         <dependency>
@@ -33,7 +33,7 @@
             <artifactId>flink-streaming-java_2.10</artifactId>
             <type>test-jar</type>
             <version>1.2.0</version>
-            <scope>test</scope>
+            <scope>1.2-WATERMARKS</scope>
         </dependency>
 
         <dependency>
@@ -46,7 +46,7 @@
         <dependency>
             <groupId>org.apache.flink</groupId>
             <artifactId>flink-test-utils_2.10</artifactId>
-            <version>1.2.0</version>
+            <version>1.2-WATERMARKS</version>
             <scope>test</scope>
         </dependency>
 

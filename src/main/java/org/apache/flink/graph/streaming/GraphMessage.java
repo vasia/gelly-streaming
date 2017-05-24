@@ -16,27 +16,25 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example;
-
-import org.apache.flink.graph.streaming.VertexMessage;
+package org.apache.flink.graph.streaming;
 
 
-public class SimpleVertexMessage implements VertexMessage<Long>{
-	                             
-	private final long targetID;
-	private final double payload;
+import org.apache.flink.api.java.tuple.Tuple2;
 
-	public SimpleVertexMessage(long targetID, double payload) {
-		this.targetID = targetID;
-		this.payload = payload;
+public class GraphMessage<K, MESSAGE> extends Tuple2<K, MESSAGE> {
+	
+	public GraphMessage() {}
+	
+	public GraphMessage(K targetID, MESSAGE msg){
+		this.f0 = targetID;
+		this.f1 = msg;
 	}
-
-	public double getContent() {
-		return payload;
+	
+	public K getKey(){
+		return this.f0;
 	}
-
-	@Override
-	public Long getKey() {
-		return targetID;
+	
+	public MESSAGE getValue(){
+		return this.f1;
 	}
 }

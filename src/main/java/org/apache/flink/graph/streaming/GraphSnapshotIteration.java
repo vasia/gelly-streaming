@@ -20,7 +20,9 @@
 package org.apache.flink.graph.streaming;
 
 
+import org.apache.flink.api.common.functions.Function;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.util.Collector;
 
 /**
@@ -30,7 +32,7 @@ import org.apache.flink.util.Collector;
  * @param <Message> Vertex Message Type 
  * @param <OUT> Output Type
  */
-public abstract class GraphSnapshotIteration<K, VV, Message extends VertexMessage<K>, OUT> {
+public abstract class GraphSnapshotIteration<K, VV, Message, OUT> implements Function, ResultTypeQueryable<OUT> {
 
 	/**
 	 * 
@@ -49,7 +51,7 @@ public abstract class GraphSnapshotIteration<K, VV, Message extends VertexMessag
 	 * @param inputMessages
 	 * @return
 	 */
-	public abstract void compute(VertexContext<K, VV, Message, OUT> vertexCtx, Iterable<Message> inputMessages);
+	public abstract void compute(VertexContext<K, VV, Message, OUT> vertexCtx, Iterable<GraphMessage<K, Message>> inputMessages);
 
 	/**
 	 * This operation generates the output events, scoped by vertex
@@ -62,6 +64,6 @@ public abstract class GraphSnapshotIteration<K, VV, Message extends VertexMessag
 	/**
 	 * TODO get rid of this asap
 	 */
-	public abstract TypeInformation<Message> getMessageTypeInfo();
+	public abstract TypeInformation<Message> getMessageType();
 	
 }

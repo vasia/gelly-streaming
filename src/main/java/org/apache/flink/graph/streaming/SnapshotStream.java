@@ -22,7 +22,6 @@ import java.util.*;
 
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
-import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.operators.translation.WrappingFunction;
@@ -142,20 +141,25 @@ public class SnapshotStream<K, EV> {
 	 * @param <OUT> The type of the output stream triggered by the iterative computation
 	 * @return
 	 */
-	public <VV, Message extends VertexMessage<K>, OUT> DataStream<OUT> run(GraphSnapshotIteration<K, VV, Message, OUT> iterativeComputation, int numIterations) throws Exception {
+	public <VV, Message, OUT> DataStream<OUT> run(GraphSnapshotIteration<K, VV, Message, OUT> iterativeComputation, int numIterations) throws Exception {
 		
 		//form adjacency lists to trigger iterative computation on that state
 
 
 		TypeInformation<K> keyType = ((TupleTypeInfo<?>) rawSnapshotStream.getInputType()).getTypeAt(0);
-		SingleOutputStreamOperator adjStream = 
-				this.applyOnNeighbors(new EdgeFoldWrapper(keyType));
-//						.returns(TypeInformation.of(new TypeHint<Tuple2<K, Iterable<K>>>() {
-//					@Override
-//					public TypeInformation<Tuple2<K, Iterable<K>>> getTypeInfo() {
-//						return new TupleTypeInfo<>(keyType);
-//					}
-//				}));
+		TypeInformation<?> feedbackType = new TupleTypeInfo<>(GraphMessage.class, keyType, iterativeComputation.getMessageType());
+		
+		SingleOutputStreamOperator<Tuple2<K, Iterable<K>>> adjStream = 
+				this.rawSnapshotStream.apply(new WindowFunction<Edge<K,EV>, Tuple2<K, Iterable<K>>, K, TimeWindow>() {
+					@Override
+					public void apply(K k, TimeWindow timeWindow, Iterable<Edge<K, EV>> iterable, Collector<Tuple2<K, Iterable<K>>> collector) throws Exception {
+						Set<K> neighborhood = new HashSet<>();
+						for(Edge<K, EV> edge : iterable){
+							neighborhood.add(edge.f1);
+						}
+						collector.collect(new Tuple2<>(k, neighborhood));
+					}
+				});
 		
 		KeyedStream<Tuple2<K, Iterable<K>>, K> keyedAdjStream =  adjStream.keyBy(new KeySelector<Tuple2<K,Iterable<K>>, K>() {
 					@Override
@@ -168,34 +172,10 @@ public class SnapshotStream<K, EV> {
 				.iterateSyncFor(numIterations,
 						new SnapshotLoopWrapper<>(iterativeComputation),
 						new SnapshotFeedbackBuilder(),
-						iterativeComputation.getMessageTypeInfo());
-
+						(TypeInformation<GraphMessage<K,Message>>) feedbackType);
 	}
 	
-	private static final class EdgeFoldWrapper<K, EV> implements EdgesApply<K, EV, Tuple2<K, Iterable<K>>>, ResultTypeQueryable<Tuple2<K, Iterable<K>>>{
-
-		private final TypeInformation<K> keyType;
-
-		public EdgeFoldWrapper (TypeInformation<K> keyType){
-			this.keyType = keyType;
-		}
-		
-		@Override
-		public void applyOnEdges(K vertexID, Iterable<Tuple2<K, EV>> neighbors, Collector<Tuple2<K, Iterable<K>>> out) throws Exception {
-			Set<K> neighborhood = new HashSet<>();
-			for(Tuple2<K, EV> edge : neighbors){
-				neighborhood.add(edge.f0);
-			}
-			out.collect(new Tuple2<>(vertexID, neighborhood));
-		}
-
-		@Override
-		public TypeInformation<Tuple2<K, Iterable<K>>> getProducedType() {
-			return new TupleTypeInfo<>(keyType, keyType); 
-		}
-	}
-	
-	private static class SnapshotLoopWrapper<K, VV, Message extends VertexMessage<K>, OUT> implements WindowLoopFunction<Tuple2<K,Iterable<K>>, Message, OUT, Message, K, TimeWindow>{
+	private static class SnapshotLoopWrapper<K, VV, Message, OUT> implements WindowLoopFunction<Tuple2<K,Iterable<K>>, GraphMessage<K, Message>, OUT, GraphMessage<K, Message>, K, TimeWindow>, ResultTypeQueryable<OUT>{
 
 		private final GraphSnapshotIteration<K, VV, Message, OUT> userIteration;
 
@@ -207,7 +187,7 @@ public class SnapshotStream<K, EV> {
 		}
 
 		@Override
-		public void entry(K vertexID, TimeWindow timeWindow, Iterable<Tuple2<K, Iterable<K>>> contents, Collector<Either<Message, OUT>> out) throws Exception {
+		public void entry(K vertexID, TimeWindow timeWindow, Iterable<Tuple2<K, Iterable<K>>> contents, Collector<Either<GraphMessage<K, Message>, OUT>> out) throws Exception {
 			Map<K, Tuple2<Iterable<K>, VV>> contextState = statePerContext.get(timeWindow.getTimeContext());
 			if(contextState == null){
 				contextState = new HashMap<>();
@@ -220,12 +200,12 @@ public class SnapshotStream<K, EV> {
 		}
 
 		@Override
-		public void step(K vertexID, TimeWindow timeWindow, Iterable<Message> messages, Collector<Either<Message, OUT>> collector) throws Exception {
+		public void step(K vertexID, TimeWindow timeWindow, Iterable<GraphMessage<K, Message>> messages, Collector<Either<GraphMessage<K, Message>, OUT>> collector) throws Exception {
 			userIteration.compute(new VertexContext<>(vertexID, statePerContext.get(timeWindow.getTimeContext()).get(vertexID), collector), messages);
 		}
 
 		@Override
-		public void onTermination(List<Long> list, Collector<Either<Message, OUT>> collector) throws Exception {
+		public void onTermination(List<Long> list, Collector<Either<GraphMessage<K, Message>, OUT>> collector) throws Exception {
 			Map<K, Tuple2<Iterable<K>, VV>> graphDone = statePerContext.get(list);
 
 			for (Map.Entry<K, Tuple2<Iterable<K>, VV>> entry: graphDone.entrySet()){
@@ -244,19 +224,28 @@ public class SnapshotStream<K, EV> {
 			//we are done here with this context
 			statePerContext.remove(list);
 		}
+
+		@Override
+		public TypeInformation<OUT> getProducedType() {
+			return userIteration.getProducedType();
+		}
 	}
 	
-	private static class SnapshotFeedbackBuilder<Message extends VertexMessage<K>, K> implements FeedbackBuilder<Message, K> {
+	private static class SnapshotFeedbackBuilder<Message, K> implements FeedbackBuilder<GraphMessage<K, Message>, K> {
 		
 		@Override
-		public KeyedStream<Message, K> feedback(DataStream<Message> dataStream) {
-			return dataStream.keyBy(new KeySelector<Message, K>() {
-				@Override
-				public K getKey(Message message) throws Exception {
-					return message.getKey();
-				}
-			});
+		public KeyedStream<GraphMessage<K, Message>, K> feedback(DataStream<GraphMessage<K, Message>> dataStream) {
+			return dataStream.keyBy(new SnapshotKeySelector<>()) ;
 		}
+	}
+	
+	public static final class SnapshotKeySelector<Message, K> implements KeySelector<GraphMessage<K, Message>, K> {
+
+		@Override
+		public K getKey(GraphMessage<K, Message> message) throws Exception {
+			return message.f0;
+		}
+
 	}
 
 	/**

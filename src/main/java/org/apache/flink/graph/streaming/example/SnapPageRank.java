@@ -23,14 +23,15 @@ package org.apache.flink.graph.streaming.example;
 import org.apache.flink.api.common.ProgramDescription;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
+import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.graph.Edge;
-import org.apache.flink.graph.streaming.GraphSnapshotIteration;
-import org.apache.flink.graph.streaming.SimpleEdgeStream;
-import org.apache.flink.graph.streaming.SnapshotStream;
-import org.apache.flink.graph.streaming.VertexContext;
+import org.apache.flink.graph.streaming.*;
 import org.apache.flink.shaded.com.google.common.collect.Iterables;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -55,13 +56,14 @@ public class SnapPageRank implements ProgramDescription{
 
 		SimpleEdgeStream<Long, NullValue> edges = getGraphStream(env);
 		SnapshotStream<Long, NullValue> snapshotStream= edges.slice(Time.milliseconds(sliceWindow));
-		snapshotStream.run(new PageRankIteration(), 10);
+		((SingleOutputStreamOperator<Tuple2<Long, Double>>) snapshotStream.run(new PageRankIteration(), 10))
+				.returns(new TypeHint<Tuple2<Long, Double>>() {});
 
 		env.execute("Streaming Page Rank");
 		
 	}                                                                                                                      	
 	
-	private static class PageRankIteration extends GraphSnapshotIteration<Long, Double, SimpleVertexMessage, Tuple2<Long, Double>>{
+	private static class PageRankIteration extends GraphSnapshotIteration<Long, Double, Double, Tuple2<Long, Double>> implements ResultTypeQueryable<Tuple2<Long, Double>>{
 		
 		@Override
 		public Double initialState() {
@@ -69,18 +71,18 @@ public class SnapPageRank implements ProgramDescription{
 		}
 
 		@Override
-		public void preCompute(VertexContext<Long, Double, SimpleVertexMessage, Tuple2<Long, Double>> vertexCtx) {
+		public void preCompute(VertexContext<Long, Double, Double, Tuple2<Long, Double>> vertexCtx) {
 			for(long neighbor: vertexCtx.getNeighbors()){
-				vertexCtx.sendMessage(new SimpleVertexMessage(neighbor, vertexCtx.getVertexState()));
+				vertexCtx.sendMessage(neighbor, vertexCtx.getVertexState());
 			}
 		}
 
 		@Override
-		public void compute(VertexContext<Long, Double, SimpleVertexMessage, Tuple2<Long, Double>> vertexCtx, Iterable<SimpleVertexMessage> inputMessages) {
+		public void compute(VertexContext<Long, Double, Double, Tuple2<Long, Double>> vertexCtx, Iterable<GraphMessage<Long, Double>> inputMessages) {
 			double sum = 0;
 			
-			for(SimpleVertexMessage msg: inputMessages){
-				sum += msg.getContent();
+			for(GraphMessage<Long, Double> msg: inputMessages){
+				sum += msg.getValue();
 			}
 			
 			long numNeighbors = Iterables.size(vertexCtx.getNeighbors()); 
@@ -88,18 +90,23 @@ public class SnapPageRank implements ProgramDescription{
 			double dividedRank = vertexCtx.getVertexState() / (double) numNeighbors;
 
 			for(long neighbor: vertexCtx.getNeighbors()){
-				vertexCtx.sendMessage(new SimpleVertexMessage(neighbor, dividedRank));
+				vertexCtx.sendMessage(neighbor, dividedRank);
 			}
 		}
 
 		@Override
-		public void postCompute(VertexContext<Long, Double, SimpleVertexMessage, Tuple2<Long, Double>> vertexCtx, Collector<Tuple2<Long, Double>> out) {
+		public void postCompute(VertexContext<Long, Double, Double, Tuple2<Long, Double>> vertexCtx, Collector<Tuple2<Long, Double>> out) {
 			out.collect(new Tuple2<>(vertexCtx.getVertexID(), vertexCtx.getVertexState()));
 		}
 
 		@Override
-		public TypeInformation<SimpleVertexMessage> getMessageTypeInfo() {
-			return TypeInformation.of(SimpleVertexMessage.class);
+		public TypeInformation<Double> getMessageType() {
+			return TypeInformation.of(Double.class);
+		}
+
+		@Override
+		public TypeInformation<Tuple2<Long, Double>> getProducedType() {
+			return new TupleTypeInfo<>(TypeInformation.of(Long.class), TypeInformation.of(Double.class));
 		}
 	}
 	

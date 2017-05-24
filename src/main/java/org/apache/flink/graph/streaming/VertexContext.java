@@ -29,13 +29,13 @@ import org.apache.flink.util.Collector;
  * @param <Message> vertex message type
  * @param <OUT> output result type
  */
-public class VertexContext<K,VV, Message extends  VertexMessage<K>, OUT>{
+public class VertexContext<K,VV, Message, OUT>{
 
 	private final K id;
 	private final Tuple2<Iterable<K>, VV> vertexCtx;
-	private final Collector<Either<Message, OUT>> wrappedOut;
+	private final Collector<Either<GraphMessage<K, Message>, OUT>> wrappedOut;
 
-	public VertexContext(K id, Tuple2<Iterable<K>, VV> ctx, Collector<Either<Message, OUT>> out){
+	public VertexContext(K id, Tuple2<Iterable<K>, VV> ctx, Collector<Either<GraphMessage<K, Message>, OUT>> out){
 		this.id = id;
 		this.vertexCtx = ctx;
 		this.wrappedOut = out;
@@ -57,7 +57,7 @@ public class VertexContext<K,VV, Message extends  VertexMessage<K>, OUT>{
 		vertexCtx.setField(newState,1);
 	}
 
-	public void sendMessage(Message msg){
-		wrappedOut.collect(Either.Left(msg));
+	public void sendMessage(K targetVertex, Message msg){
+		wrappedOut.collect(Either.Left(new GraphMessage<>(targetVertex, msg)));
 	}
 }

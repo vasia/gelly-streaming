@@ -32,11 +32,13 @@ import org.apache.flink.util.Collector;
 public class VertexContext<K,VV, Message, OUT>{
 
 	private final K id;
+	private final long superstep;
 	private final Tuple2<Iterable<K>, VV> vertexCtx;
 	private final Collector<Either<GraphMessage<K, Message>, OUT>> wrappedOut;
 
-	public VertexContext(K id, Tuple2<Iterable<K>, VV> ctx, Collector<Either<GraphMessage<K, Message>, OUT>> out){
+	public VertexContext(K id, long superstep, Tuple2<Iterable<K>, VV> ctx, Collector<Either<GraphMessage<K, Message>, OUT>> out){
 		this.id = id;
+		this.superstep = superstep;
 		this.vertexCtx = ctx;
 		this.wrappedOut = out;
 	}
@@ -47,6 +49,10 @@ public class VertexContext<K,VV, Message, OUT>{
 
 	public Iterable<K> getNeighbors(){
 		return vertexCtx.f0;
+	}
+
+	public long getSuperstep() {
+		return superstep;
 	}
 
 	public VV getVertexState(){

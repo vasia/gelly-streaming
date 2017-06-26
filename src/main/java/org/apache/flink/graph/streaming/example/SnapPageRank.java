@@ -21,22 +21,26 @@
 package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.ProgramDescription;
-import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.api.java.tuple.Tuple3;
 import org.apache.flink.api.java.typeutils.ResultTypeQueryable;
 import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.graph.streaming.*;
+import org.apache.flink.hadoop.shaded.com.google.common.collect.Lists;
 import org.apache.flink.shaded.com.google.common.collect.Iterables;
+import org.apache.flink.streaming.api.TimeCharacteristic;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.AscendingTimestampExtractor;
+import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
+import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.types.NullValue;
 import org.apache.flink.util.Collector;
+import java.util.Collection;
 
 
 /**
@@ -51,51 +55,84 @@ public class SnapPageRank implements ProgramDescription{
 		if(!parseParameters(args)) {
 			return;
 		}
-
+		
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-
-		SimpleEdgeStream<Long, NullValue> edges = getGraphStream(env);
-		SnapshotStream<Long, NullValue> snapshotStream= edges.slice(Time.milliseconds(sliceWindow));
-		((SingleOutputStreamOperator<Tuple2<Long, Double>>) snapshotStream.run(new PageRankIteration(), 10))
-				.returns(new TypeHint<Tuple2<Long, Double>>() {});
-
+		SimpleEdgeStream<Integer, NullValue> edges = getGraphStream(env);
+		SnapshotStream<Integer, NullValue> snapshotStream = edges.slice(Time.milliseconds(sliceWindow));
+		
+		//test
+//		snapshotStream.applyOnNeighbors(new EdgesApply<Integer, NullValue, String>() {
+//					@Override
+//					public void applyOnEdges(Integer vertexID, Iterable<Tuple2<Integer, NullValue>> neighbors, Collector<String> out) throws Exception {
+//						StringBuffer strbuf = new StringBuffer();
+//						strbuf.append(vertexID+":");
+//						for(Tuple2<Integer, NullValue> neig : neighbors){
+//							strbuf.append(neig.f0+"-");
+//						}
+//						out.collect(strbuf.toString());
+//					}
+//				}).keyBy(new KeySelector<String, Integer>() {
+//			@Override
+//			public Integer getKey(String s) throws Exception {
+//				return Integer.valueOf(s.charAt(0));
+//			}
+//		}).timeWindow(Time.milliseconds(sliceWindow)).apply(new WindowFunction<String, String, Integer, TimeWindow>() {
+//			@Override
+//			public void apply(Integer integer, TimeWindow timeWindow, Iterable<String> iterable, Collector<String> collector) throws Exception {
+//				for(String it : iterable){
+//					collector.collect(timeWindow.getTimeContext()+"("+timeWindow.getStart()+", "+timeWindow.getEnd()+") - "+ it);
+//				}
+//			}
+//		}).print();
+		
+		
+		((SingleOutputStreamOperator<Tuple2<Integer, Double>>) snapshotStream.run(new PageRankIteration(), numIterations))
+				.returns(new TypeHint<Tuple2<Integer, Double>>() {})
+				.print();
+		
+		
+		System.err.println(env.getExecutionPlan());
 		env.execute("Streaming Page Rank");
 		
 	}                                                                                                                      	
 	
-	private static class PageRankIteration extends GraphSnapshotIteration<Long, Double, Double, Tuple2<Long, Double>> implements ResultTypeQueryable<Tuple2<Long, Double>>{
+	private static class PageRankIteration extends GraphSnapshotIteration<Integer, Double, Double, Tuple2<Integer, Double>> implements ResultTypeQueryable<Tuple2<Integer, Double>>{
 		
 		@Override
 		public Double initialState() {
+			System.err.println("DEBUG - INIT PHASE");
 			return 1.0d;
 		}
-
+		
 		@Override
-		public void preCompute(VertexContext<Long, Double, Double, Tuple2<Long, Double>> vertexCtx) {
-			for(long neighbor: vertexCtx.getNeighbors()){
+		public void preCompute(VertexContext<Integer, Double, Double, Tuple2<Integer, Double>> vertexCtx) {
+			System.err.println("DEBUG - PRECOMPUTE PHASE");
+			for(int neighbor: vertexCtx.getNeighbors()){
 				vertexCtx.sendMessage(neighbor, vertexCtx.getVertexState());
 			}
 		}
 
 		@Override
-		public void compute(VertexContext<Long, Double, Double, Tuple2<Long, Double>> vertexCtx, Iterable<GraphMessage<Long, Double>> inputMessages) {
+		public void compute(VertexContext<Integer, Double, Double, Tuple2<Integer, Double>> vertexCtx, Iterable<GraphMessage<Integer, Double>> inputMessages) {
+			System.err.println("DEBUG - COMPUTE PHASE");
 			double sum = 0;
-			
-			for(GraphMessage<Long, Double> msg: inputMessages){
+
+			for(GraphMessage<Integer, Double> msg: inputMessages){
 				sum += msg.getValue();
 			}
-			
-			long numNeighbors = Iterables.size(vertexCtx.getNeighbors()); 
+
+			long numNeighbors = Iterables.size(vertexCtx.getNeighbors());
 			vertexCtx.setVertexState(0.15 / (double) numNeighbors + 0.85 * sum);
 			double dividedRank = vertexCtx.getVertexState() / (double) numNeighbors;
 
-			for(long neighbor: vertexCtx.getNeighbors()){
+			for(int neighbor: vertexCtx.getNeighbors()){
 				vertexCtx.sendMessage(neighbor, dividedRank);
 			}
 		}
 
 		@Override
-		public void postCompute(VertexContext<Long, Double, Double, Tuple2<Long, Double>> vertexCtx, Collector<Tuple2<Long, Double>> out) {
+		public void postCompute(VertexContext<Integer, Double, Double, Tuple2<Integer, Double>> vertexCtx, Collector<Tuple2<Integer, Double>> out) {
+			System.err.println("DEBUG - POSTCOMPUTE PHASE");
 			out.collect(new Tuple2<>(vertexCtx.getVertexID(), vertexCtx.getVertexState()));
 		}
 
@@ -105,8 +142,8 @@ public class SnapPageRank implements ProgramDescription{
 		}
 
 		@Override
-		public TypeInformation<Tuple2<Long, Double>> getProducedType() {
-			return new TupleTypeInfo<>(TypeInformation.of(Long.class), TypeInformation.of(Double.class));
+		public TypeInformation<Tuple2<Integer, Double>> getProducedType() {
+			return new TupleTypeInfo<>(TypeInformation.of(Integer.class), TypeInformation.of(Double.class));
 		}
 	}
 	
@@ -119,63 +156,90 @@ public class SnapPageRank implements ProgramDescription{
 	//     UTIL METHODS
 	// *************************************************************************
 
-	private static boolean fileOutput = false;
-	private static String edgeInputPath = null;
-	private static long sliceWindow = 2000;
+	private static boolean parametrized = false;
+	private static String dataLocation = null;
+	private static long sliceWindow = 1000;
+	private static int numIterations = 10;
+	
+	private static final Collection<Tuple3<Integer, Integer, Long>> sampleStream = Lists.newArrayList(
+			new Tuple3<>(1, 2, 1000l),
+			new Tuple3<>(1, 3, 1000l),
+			new Tuple3<>(1, 4, 1000l),
+			new Tuple3<>(1, 2, 2000l),
+			new Tuple3<>(1, 3, 2000l),
+			new Tuple3<>(1, 4, 2000l),
+			new Tuple3<>(1, 2, 3000l),
+			new Tuple3<>(1, 3, 3000l),
+			new Tuple3<>(1, 4, 4000l),
+			new Tuple3<>(1, 2, 5000l)
+//			new Tuple3<>(5, 6, 3l),
+//			new Tuple3<>(5, 7, 3l),
+//			new Tuple3<>(5, 8, 3l),
+//			new Tuple3<>(6, 7, 3l),
+//			new Tuple3<>(6, 8, 3l),
+//			new Tuple3<>(7, 8, 3l)
+//			new Tuple3<>(8, 9, 10l)
+	);
 	
 
 	private static boolean parseParameters(String[] args) {
 
 		if(args.length > 0) {
-			if(args.length != 1) {
-				System.err.println("Usage: ConnectedComponentsExample <input edges path>");
-				return false;
-			}
-
-			fileOutput = true;
-			edgeInputPath = args[0];
-		} else {
-			System.out.println("Executing Page Rank example with default parameters and built-in default data.");
+			parametrized = true;
+			dataLocation = args[0];
+			sliceWindow = Long.valueOf(args[1]);
+			numIterations = Integer.valueOf(args[2]);
 		}
 		return true;
 	}
 
+	private static class PageRankSampleSrc extends RichSourceFunction<Edge<Integer, NullValue>> {
+		
+		@Override
+		public void run(SourceContext<Edge<Integer, NullValue>> ctx) throws Exception {
+			long curTime = -1;
+			for (Tuple3<Integer, Integer, Long> next:  sampleStream) {
+				ctx.collectWithTimestamp(new Edge<>(next.f0, next.f1, NullValue.getInstance()), next.f2);
+
+				if(curTime == -1){
+					curTime = next.f2;
+				}
+				if(curTime < next.f2){
+					curTime = next.f2;
+					ctx.emitWatermark(new Watermark(curTime-1));
+				}
+			}
+		}
+
+		@Override
+		public void cancel() {}
+	}
+
+
 
 	@SuppressWarnings("serial")
-	private static SimpleEdgeStream<Long, NullValue> getGraphStream(StreamExecutionEnvironment env) {
+	private static SimpleEdgeStream<Integer, NullValue> getGraphStream(StreamExecutionEnvironment env) {
 
-		if (fileOutput) {
-			return new SimpleEdgeStream<>(env.readTextFile(edgeInputPath)
-					.map(new MapFunction<String, Edge<Long, NullValue>>() {
+		if (parametrized) {
+			env.setStreamTimeCharacteristic(TimeCharacteristic.IngestionTime);
+			
+			return new SimpleEdgeStream<>(env.readTextFile(dataLocation)
+					.map(new MapFunction<String, Edge<Integer, NullValue>>() {
 						@Override
-						public Edge<Long, NullValue> map(String s) {
-							String[] fields = s.split("\\s");
-							long src = Long.parseLong(fields[0]);
-							long trg = Long.parseLong(fields[1]);
+						public Edge<Integer, NullValue> map(String s) {
+							String[] fields = s.split("\\s+");
+							int src = Integer.parseInt(fields[0]);
+							int trg = Integer.parseInt(fields[1]);
 							return new Edge<>(src, trg, NullValue.getInstance());
 						}
 					}), env);
 		}
-
-		return new SimpleEdgeStream<>(env.generateSequence(1, 100).flatMap(
-				new FlatMapFunction<Long, Edge<Long, Long>>() {
-					@Override
-					public void flatMap(Long key, Collector<Edge<Long, Long>> out) throws Exception {
-						out.collect(new Edge<>(key, key + 2, key * 100));
-					}
-				}),
-				new AscendingTimestampExtractor<Edge<Long, Long>>() {
-					@Override
-
-					public long extractAscendingTimestamp(Edge<Long, Long> element) {
-						return element.getValue();
-					}
-				}, env).mapEdges(new MapFunction<Edge<Long, Long>, NullValue>() {
-			@Override
-			public NullValue map(Edge<Long, Long> edge) {
-				return NullValue.getInstance();
-			}
-		});
+		else { 
+			//TEST MODE
+			env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+			env.setParallelism(4);
+			return new SimpleEdgeStream<Integer, NullValue>(env.addSource(new PageRankSampleSrc()), env);
+		}
 	}
 	
 }

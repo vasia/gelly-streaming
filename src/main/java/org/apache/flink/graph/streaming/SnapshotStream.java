@@ -20,6 +20,7 @@ package org.apache.flink.graph.streaming;
 
 import java.util.*;
 
+import org.apache.commons.collections.map.HashedMap;
 import org.apache.flink.api.common.functions.FoldFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -31,6 +32,7 @@ import org.apache.flink.api.java.typeutils.TupleTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.graph.Edge;
 import org.apache.flink.streaming.api.datastream.*;
+import org.apache.flink.streaming.api.functions.windowing.LoopContext;
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.WindowLoopFunction;
 import org.apache.flink.streaming.api.windowing.time.Time;
@@ -152,12 +154,14 @@ public class SnapshotStream<K, EV> {
 		SingleOutputStreamOperator<Tuple2<K, Iterable<K>>> adjStream = 
 				this.rawSnapshotStream.apply(new WindowFunction<Edge<K,EV>, Tuple2<K, Iterable<K>>, K, TimeWindow>() {
 					@Override
-					public void apply(K k, TimeWindow timeWindow, Iterable<Edge<K, EV>> iterable, Collector<Tuple2<K, Iterable<K>>> collector) throws Exception {
+					public void apply(K k, TimeWindow timeWindow, Iterable<Edge<K, EV>> edges, Collector<Tuple2<K, Iterable<K>>> collector) throws Exception {
 						Set<K> neighborhood = new HashSet<>();
-						for(Edge<K, EV> edge : iterable){
+						for(Edge<K, EV> edge : edges){
 							neighborhood.add(edge.f1);
 						}
-						collector.collect(new Tuple2<>(k, neighborhood));
+						Tuple2<K, Iterable<K>> next = new Tuple2<>(k, neighborhood);
+						collector.collect(next);
+						System.err.println(next+": ["+timeWindow.getTimeContext()+"("+timeWindow.getStart()+", "+ timeWindow.getEnd()+")]");
 					}
 				});
 		
@@ -167,6 +171,7 @@ public class SnapshotStream<K, EV> {
 						return tpl.f0;
 					}
 				});
+		
 		return keyedAdjStream
 				.timeWindow(granularity)
 				.iterateSyncFor(numIterations,
@@ -180,49 +185,61 @@ public class SnapshotStream<K, EV> {
 		private final GraphSnapshotIteration<K, VV, Message, OUT> userIteration;
 
 		//TODO integrate with managed state once it is supported for IterativeWindows
-		private Map<List<Long>, Map<K, Tuple2<Iterable<K>,VV>>> statePerContext = new HashMap<>(); 
+		private Map<Integer, Map<K, Tuple2<Iterable<K>,VV>>> statePerContext; 
 		
 		public SnapshotLoopWrapper(GraphSnapshotIteration<K, VV, Message, OUT> userConfiguration){
 			this.userIteration = userConfiguration;
+			statePerContext = new HashedMap();
 		}
 
 		@Override
-		public void entry(K vertexID, TimeWindow timeWindow, Iterable<Tuple2<K, Iterable<K>>> contents, Collector<Either<GraphMessage<K, Message>, OUT>> out) throws Exception {
-			Map<K, Tuple2<Iterable<K>, VV>> contextState = statePerContext.get(timeWindow.getTimeContext());
+		public void entry(LoopContext<K> ctx, Iterable<Tuple2<K, Iterable<K>>> contents, Collector<Either<GraphMessage<K, Message>, OUT>> out) throws Exception {
+
+			System.err.println("DEBUG - ENTRY INVOKED");
+			
+			Map<K, Tuple2<Iterable<K>, VV>> contextState = statePerContext.get(ctx.getContext());
+			if(statePerContext == null){
+				 statePerContext = new HashMap<>();
+			}
 			if(contextState == null){
 				contextState = new HashMap<>();
-				statePerContext.put(timeWindow.getTimeContext(), contextState);
+				statePerContext.put(ctx.getContext().hashCode(), contextState);
 			}
 
 			Tuple2<K, Iterable<K>> adjList = contents.iterator().next();
-			contextState.put(vertexID, new Tuple2<>(adjList.f1, userIteration.initialState()));
-			userIteration.preCompute(new VertexContext<>(vertexID, contextState.get(vertexID), out));
+			contextState.put(ctx.getKey(), new Tuple2<>(adjList.f1, userIteration.initialState()));
+			userIteration.preCompute(new VertexContext<>(ctx.getKey(), 0, contextState.get(ctx.getKey()), out));
 		}
 
 		@Override
-		public void step(K vertexID, TimeWindow timeWindow, Iterable<GraphMessage<K, Message>> messages, Collector<Either<GraphMessage<K, Message>, OUT>> collector) throws Exception {
-			userIteration.compute(new VertexContext<>(vertexID, statePerContext.get(timeWindow.getTimeContext()).get(vertexID), collector), messages);
+		public void step(LoopContext<K> ctx, Iterable<GraphMessage<K, Message>> messages, Collector<Either<GraphMessage<K, Message>, OUT>> collector) throws Exception {
+			System.err.println("DEBUG - STEP INVOKED");
+			userIteration.compute(new VertexContext<>(ctx.getKey(), ctx.getSuperstep(), statePerContext.get(ctx.getContext().hashCode()).get(ctx.getKey()), collector), messages);
 		}
 
 		@Override
-		public void onTermination(List<Long> list, Collector<Either<GraphMessage<K, Message>, OUT>> collector) throws Exception {
-			Map<K, Tuple2<Iterable<K>, VV>> graphDone = statePerContext.get(list);
+		public void onTermination(List<Long> list, long superstep, Collector<Either<GraphMessage<K, Message>, OUT>> collector) throws Exception {
+			System.err.println("DEBUG - ONTERMINATION INVOKED for context : "+list);
+			int listID = list.hashCode();
+			if(statePerContext.containsKey(listID)){
+				Map<K, Tuple2<Iterable<K>, VV>> graphDone = statePerContext.get(listID);
 
-			for (Map.Entry<K, Tuple2<Iterable<K>, VV>> entry: graphDone.entrySet()){
-				userIteration.postCompute(new VertexContext<>(entry.getKey(), entry.getValue(), collector), new Collector<OUT>() {
-					@Override
-					public void collect(OUT out) {
-						collector.collect(Either.Right(out));
-					}
-					@Override
-					public void close() {
-						collector.close();
-					}
-				});
+				for (Map.Entry<K, Tuple2<Iterable<K>, VV>> entry: graphDone.entrySet()){
+					userIteration.postCompute(new VertexContext<>(entry.getKey(), superstep , entry.getValue(), collector), new Collector<OUT>() {
+						@Override
+						public void collect(OUT out) {
+							collector.collect(Either.Right(out));
+						}
+						@Override
+						public void close() {
+							collector.close();
+						}
+					});
+				}
+
+				//we are done here with this context
+				statePerContext.remove(listID);
 			}
-			
-			//we are done here with this context
-			statePerContext.remove(list);
 		}
 
 		@Override

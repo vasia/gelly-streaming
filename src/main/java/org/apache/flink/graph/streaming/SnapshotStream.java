@@ -37,6 +37,7 @@ import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.WindowLoopFunction;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
+import org.apache.flink.streaming.runtime.tasks.progress.FixpointIterationTermination;
 import org.apache.flink.types.Either;
 import org.apache.flink.util.Collector;
 
@@ -133,9 +134,8 @@ public class SnapshotStream<K, EV> {
 	 * In the current implementation a full graph snapshot is being created and kept internally while 
 	 * iterative computation is synchronized across workers.
 	 *
-	 * Note: For completeness it is recommended to run numIterations on sliced graph streams with ALL direction.
-	 * 
-	 * TODO add support for fixpoint and stale synchronous
+	 * Note: For completeness it is recommended to iterateFor numIterations on sliced graph streams with ALL direction.
+	 *
 	 * 
 	 * @param iterativeComputation
 	 * @param <VV> The type of computational state in focus scoped per vertex (e.g., ranks, connected components etc.)
@@ -143,15 +143,42 @@ public class SnapshotStream<K, EV> {
 	 * @param <OUT> The type of the output stream triggered by the iterative computation
 	 * @return
 	 */
-	public <VV, Message, OUT> DataStream<OUT> run(GraphSnapshotIteration<K, VV, Message, OUT> iterativeComputation, int numIterations) throws Exception {
-		
-		//form adjacency lists to trigger iterative computation on that state
+	public <VV, Message, OUT> DataStream<OUT> iterateFor(GraphSnapshotIteration<K, VV, Message, OUT> iterativeComputation, int numIterations) throws Exception {
 
-
+		WindowedStream<Tuple2<K, Iterable<K>>, K, TimeWindow> snapshotStream = makeSnapshotStream();
 		TypeInformation<K> keyType = ((TupleTypeInfo<?>) rawSnapshotStream.getInputType()).getTypeAt(0);
 		TypeInformation<?> feedbackType = new TupleTypeInfo<>(GraphMessage.class, keyType, iterativeComputation.getMessageType());
 		
-		SingleOutputStreamOperator<Tuple2<K, Iterable<K>>> adjStream = 
+		return snapshotStream
+				.iterateSyncFor(numIterations,
+						new SnapshotLoopWrapper<>(iterativeComputation),
+						new SnapshotFeedbackBuilder(),
+						(TypeInformation<GraphMessage<K,Message>>) feedbackType);
+	}
+
+	/**
+	 * Similar to iterateFor but with Fixpoint termination
+	 *
+	 */
+	public <VV, Message, OUT> DataStream<OUT> iterateFixpoint(GraphSnapshotIteration<K, VV, Message, OUT> iterativeComputation) throws Exception {
+		
+		WindowedStream<Tuple2<K, Iterable<K>>, K, TimeWindow> snapshotedStream = makeSnapshotStream();
+		TypeInformation<K> keyType = ((TupleTypeInfo<?>) rawSnapshotStream.getInputType()).getTypeAt(0);
+		TypeInformation<?> feedbackType = new TupleTypeInfo<>(GraphMessage.class, keyType, iterativeComputation.getMessageType());
+
+		return snapshotedStream
+				.iterateSync(
+						new SnapshotLoopWrapper<>(iterativeComputation),
+						new FixpointIterationTermination(),
+						new SnapshotFeedbackBuilder(),
+						(TypeInformation<GraphMessage<K,Message>>) feedbackType);
+	
+	}
+
+	private WindowedStream<Tuple2<K, Iterable<K>>, K, TimeWindow> makeSnapshotStream() {
+		//form adjacency lists to trigger iterative computation on that state
+
+		SingleOutputStreamOperator<Tuple2<K, Iterable<K>>> adjStream =
 				this.rawSnapshotStream.apply(new WindowFunction<Edge<K,EV>, Tuple2<K, Iterable<K>>, K, TimeWindow>() {
 					@Override
 					public void apply(K k, TimeWindow timeWindow, Iterable<Edge<K, EV>> edges, Collector<Tuple2<K, Iterable<K>>> collector) throws Exception {
@@ -161,31 +188,25 @@ public class SnapshotStream<K, EV> {
 						}
 						Tuple2<K, Iterable<K>> next = new Tuple2<>(k, neighborhood);
 						collector.collect(next);
-						System.err.println(next+": ["+timeWindow.getTimeContext()+"("+timeWindow.getStart()+", "+ timeWindow.getEnd()+")]");
 					}
 				});
-		
+
 		KeyedStream<Tuple2<K, Iterable<K>>, K> keyedAdjStream =  adjStream.keyBy(new KeySelector<Tuple2<K,Iterable<K>>, K>() {
-					@Override
-					public K getKey(Tuple2<K, Iterable<K>> tpl) throws Exception {
-						return tpl.f0;
-					}
-				});
-		
-		return keyedAdjStream
-				.timeWindow(granularity)
-				.iterateSyncFor(numIterations,
-						new SnapshotLoopWrapper<>(iterativeComputation),
-						new SnapshotFeedbackBuilder(),
-						(TypeInformation<GraphMessage<K,Message>>) feedbackType);
+			@Override
+			public K getKey(Tuple2<K, Iterable<K>> tpl) throws Exception {
+				return tpl.f0;
+			}
+		});
+		return keyedAdjStream.timeWindow(granularity);
 	}
-	
+
+
 	private static class SnapshotLoopWrapper<K, VV, Message, OUT> implements WindowLoopFunction<Tuple2<K,Iterable<K>>, GraphMessage<K, Message>, OUT, GraphMessage<K, Message>, K, TimeWindow>, ResultTypeQueryable<OUT>{
 
 		private final GraphSnapshotIteration<K, VV, Message, OUT> userIteration;
 
 		//TODO integrate with managed state once it is supported for IterativeWindows
-		private Map<Integer, Map<K, Tuple2<Iterable<K>,VV>>> statePerContext; 
+		private Map<List<Long>, Map<K, Tuple2<Iterable<K>,VV>>> statePerContext; 
 		
 		public SnapshotLoopWrapper(GraphSnapshotIteration<K, VV, Message, OUT> userConfiguration){
 			this.userIteration = userConfiguration;
@@ -195,15 +216,16 @@ public class SnapshotStream<K, EV> {
 		@Override
 		public void entry(LoopContext<K> ctx, Iterable<Tuple2<K, Iterable<K>>> contents, Collector<Either<GraphMessage<K, Message>, OUT>> out) throws Exception {
 
-			System.err.println("DEBUG - ENTRY INVOKED");
+//			System.err.println("DEBUG - ENTRY INVOKED");
 			
-			Map<K, Tuple2<Iterable<K>, VV>> contextState = statePerContext.get(ctx.getContext());
 			if(statePerContext == null){
 				 statePerContext = new HashMap<>();
 			}
+			Map<K, Tuple2<Iterable<K>, VV>> contextState = statePerContext.get(ctx.getContext());
+
 			if(contextState == null){
 				contextState = new HashMap<>();
-				statePerContext.put(ctx.getContext().hashCode(), contextState);
+				statePerContext.put(ctx.getContext(), contextState);
 			}
 
 			Tuple2<K, Iterable<K>> adjList = contents.iterator().next();
@@ -213,16 +235,17 @@ public class SnapshotStream<K, EV> {
 
 		@Override
 		public void step(LoopContext<K> ctx, Iterable<GraphMessage<K, Message>> messages, Collector<Either<GraphMessage<K, Message>, OUT>> collector) throws Exception {
-			System.err.println("DEBUG - STEP INVOKED");
-			userIteration.compute(new VertexContext<>(ctx.getKey(), ctx.getSuperstep(), statePerContext.get(ctx.getContext().hashCode()).get(ctx.getKey()), collector), messages);
+//			System.err.println("DEBUG - STEP INVOKED : "+ctx);
+			if(statePerContext.containsKey(ctx.getContext())){
+				userIteration.compute(new VertexContext<>(ctx.getKey(), ctx.getSuperstep(), statePerContext.get(ctx.getContext()).get(ctx.getKey()), collector), messages);
+			}
 		}
 
 		@Override
 		public void onTermination(List<Long> list, long superstep, Collector<Either<GraphMessage<K, Message>, OUT>> collector) throws Exception {
-			System.err.println("DEBUG - ONTERMINATION INVOKED for context : "+list);
-			int listID = list.hashCode();
-			if(statePerContext.containsKey(listID)){
-				Map<K, Tuple2<Iterable<K>, VV>> graphDone = statePerContext.get(listID);
+//			System.err.println("DEBUG - ONTERMINATION INVOKED for context : "+list);
+			if(statePerContext.containsKey(list)){
+				Map<K, Tuple2<Iterable<K>, VV>> graphDone = statePerContext.get(list);
 
 				for (Map.Entry<K, Tuple2<Iterable<K>, VV>> entry: graphDone.entrySet()){
 					userIteration.postCompute(new VertexContext<>(entry.getKey(), superstep , entry.getValue(), collector), new Collector<OUT>() {
@@ -238,7 +261,7 @@ public class SnapshotStream<K, EV> {
 				}
 
 				//we are done here with this context
-				statePerContext.remove(listID);
+				statePerContext.remove(list);
 			}
 		}
 

@@ -22,7 +22,6 @@ package org.apache.flink.graph.streaming.example;
 
 import org.apache.flink.api.common.ProgramDescription;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.common.typeinfo.TypeHint;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
@@ -33,7 +32,6 @@ import org.apache.flink.graph.streaming.*;
 import org.apache.flink.hadoop.shaded.com.google.common.collect.Lists;
 import org.apache.flink.shaded.com.google.common.collect.Iterables;
 import org.apache.flink.streaming.api.TimeCharacteristic;
-import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.source.RichSourceFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -57,56 +55,26 @@ public class SnapPageRank implements ProgramDescription{
 		}
 		
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		SimpleEdgeStream<Integer, NullValue> edges = getGraphStream(env);
-		SnapshotStream<Integer, NullValue> snapshotStream = edges.slice(Time.milliseconds(sliceWindow));
 		
-		//test
-//		snapshotStream.applyOnNeighbors(new EdgesApply<Integer, NullValue, String>() {
-//					@Override
-//					public void applyOnEdges(Integer vertexID, Iterable<Tuple2<Integer, NullValue>> neighbors, Collector<String> out) throws Exception {
-//						StringBuffer strbuf = new StringBuffer();
-//						strbuf.append(vertexID+":");
-//						for(Tuple2<Integer, NullValue> neig : neighbors){
-//							strbuf.append(neig.f0+"-");
-//						}
-//						out.collect(strbuf.toString());
-//					}
-//				}).keyBy(new KeySelector<String, Integer>() {
-//			@Override
-//			public Integer getKey(String s) throws Exception {
-//				return Integer.valueOf(s.charAt(0));
-//			}
-//		}).timeWindow(Time.milliseconds(sliceWindow)).apply(new WindowFunction<String, String, Integer, TimeWindow>() {
-//			@Override
-//			public void apply(Integer integer, TimeWindow timeWindow, Iterable<String> iterable, Collector<String> collector) throws Exception {
-//				for(String it : iterable){
-//					collector.collect(timeWindow.getTimeContext()+"("+timeWindow.getStart()+", "+timeWindow.getEnd()+") - "+ it);
-//				}
-//			}
-//		}).print();
-		
-		
-		((SingleOutputStreamOperator<Tuple2<Integer, Double>>) snapshotStream.run(new PageRankIteration(), numIterations))
-				.returns(new TypeHint<Tuple2<Integer, Double>>() {})
+		getGraphStream(env)
+				.slice(Time.milliseconds(sliceWindow))
+				.iterateFor(new PageRankIteration(), numIterations)
+//				.iterateFixpoint(new PageRankIteration())
 				.print();
 		
-		
-		System.err.println(env.getExecutionPlan());
 		env.execute("Streaming Page Rank");
-		
 	}                                                                                                                      	
 	
 	private static class PageRankIteration extends GraphSnapshotIteration<Integer, Double, Double, Tuple2<Integer, Double>> implements ResultTypeQueryable<Tuple2<Integer, Double>>{
 		
 		@Override
 		public Double initialState() {
-			System.err.println("DEBUG - INIT PHASE");
 			return 1.0d;
 		}
 		
 		@Override
 		public void preCompute(VertexContext<Integer, Double, Double, Tuple2<Integer, Double>> vertexCtx) {
-			System.err.println("DEBUG - PRECOMPUTE PHASE");
+//			System.err.println("DEBUG - PRECOMPUTE PHASE");
 			for(int neighbor: vertexCtx.getNeighbors()){
 				vertexCtx.sendMessage(neighbor, vertexCtx.getVertexState());
 			}
@@ -114,7 +82,7 @@ public class SnapPageRank implements ProgramDescription{
 
 		@Override
 		public void compute(VertexContext<Integer, Double, Double, Tuple2<Integer, Double>> vertexCtx, Iterable<GraphMessage<Integer, Double>> inputMessages) {
-			System.err.println("DEBUG - COMPUTE PHASE");
+//			System.err.println("DEBUG - COMPUTE PHASE");
 			double sum = 0;
 
 			for(GraphMessage<Integer, Double> msg: inputMessages){
@@ -122,17 +90,21 @@ public class SnapPageRank implements ProgramDescription{
 			}
 
 			long numNeighbors = Iterables.size(vertexCtx.getNeighbors());
-			vertexCtx.setVertexState(0.15 / (double) numNeighbors + 0.85 * sum);
-			double dividedRank = vertexCtx.getVertexState() / (double) numNeighbors;
+			double newState = 0.15 / (double) numNeighbors + 0.85 * sum;
+			
+			if(newState != vertexCtx.getVertexState()){
+				vertexCtx.setVertexState(newState);
+				double dividedRank = vertexCtx.getVertexState() / (double) numNeighbors;
 
-			for(int neighbor: vertexCtx.getNeighbors()){
-				vertexCtx.sendMessage(neighbor, dividedRank);
+				for(int neighbor: vertexCtx.getNeighbors()){
+					vertexCtx.sendMessage(neighbor, dividedRank);
+				}
 			}
 		}
 
 		@Override
 		public void postCompute(VertexContext<Integer, Double, Double, Tuple2<Integer, Double>> vertexCtx, Collector<Tuple2<Integer, Double>> out) {
-			System.err.println("DEBUG - POSTCOMPUTE PHASE");
+//			System.err.println("DEBUG - POSTCOMPUTE PHASE");
 			out.collect(new Tuple2<>(vertexCtx.getVertexID(), vertexCtx.getVertexState()));
 		}
 
@@ -159,7 +131,7 @@ public class SnapPageRank implements ProgramDescription{
 	private static boolean parametrized = false;
 	private static String dataLocation = null;
 	private static long sliceWindow = 1000;
-	private static int numIterations = 10;
+	private static int numIterations = 5;
 	
 	private static final Collection<Tuple3<Integer, Integer, Long>> sampleStream = Lists.newArrayList(
 			new Tuple3<>(1, 2, 1000l),
@@ -237,7 +209,7 @@ public class SnapPageRank implements ProgramDescription{
 		else { 
 			//TEST MODE
 			env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
-			env.setParallelism(4);
+			env.setParallelism(2);
 			return new SimpleEdgeStream<Integer, NullValue>(env.addSource(new PageRankSampleSrc()), env);
 		}
 	}

@@ -61,8 +61,8 @@ public class SnapSSSP implements ProgramDescription{
 		
 		getGraphStream(env)
 				.slice(Time.milliseconds(sliceWindow))
-				.iterateFor(new SSSPIteration(), numIterations)
-//				.iterateFixpoint(new SSSPIteration())
+//				.iterateFor(new SSSPIteration(), numIterations)
+				.iterateFixpoint(new SSSPIteration())
 				.print();
 		
 		env.execute("Streaming SSSP");
@@ -179,7 +179,7 @@ public class SnapSSSP implements ProgramDescription{
 		@Override
 		public void run(SourceContext<Edge<Integer, NullValue>> ctx) throws Exception {
 			long curTime = -1;
-			for (Tuple3<Integer, Integer, Long> next:  sampleStream) {
+			for (Tuple3<Integer, Integer, Long> next: sampleStream) {
 				ctx.collectWithTimestamp(new Edge<>(next.f0, next.f1, NullValue.getInstance()), next.f2);
 
 				if(curTime == -1){
@@ -187,7 +187,7 @@ public class SnapSSSP implements ProgramDescription{
 				}
 				if(curTime < next.f2){
 					curTime = next.f2;
-					ctx.emitWatermark(new Watermark(curTime-1));
+					ctx.emitWatermark(new Watermark(curTime - 1));
 				}
 			}
 		}

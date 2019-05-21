@@ -21,13 +21,13 @@ import static org.junit.Assert.assertEquals;
 public class BipartitenessCheckTest extends AbstractTestBase {
 
 		@Test
-		public void test() throws Exception {
+		public void testBipartite() throws Exception {
 
 			StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 			env.setParallelism(1); //needed to ensure total ordering for windows
 			CollectSink.values.clear();
 
-			DataStream<Edge<Long, NullValue>> edges = getGraphStream(env);
+			DataStream<Edge<Long, NullValue>> edges = env.fromCollection(getBipartiteEdges());
 			GraphStream<Long, NullValue, NullValue> graph = new SimpleEdgeStream<>(edges, env);
 
 			graph
@@ -43,13 +43,32 @@ public class BipartitenessCheckTest extends AbstractTestBase {
 
 	}
 
+	@Test
+	public void testNonBipartite() throws Exception {
+
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+		env.setParallelism(1);
+		CollectSink.values.clear();
 
 
-	private static DataStream<Edge<Long, NullValue>> getGraphStream (StreamExecutionEnvironment env){
-		return env.fromCollection(getEdges());
+		DataStream<Edge<Long, NullValue>> edges = env.fromCollection(getNonBipartiteEdges());
+		GraphStream<Long, NullValue, NullValue> graph = new SimpleEdgeStream<>(edges, env);
+		graph.
+				aggregate(new BipartitenessCheck<>((long) 500))
+				.addSink(new CollectSink());
+
+		env.execute("Non Bipartiteness check");
+
+		// verify the results
+		assertEquals(Lists.newArrayList(
+				"(false,{})"),
+				CollectSink.values);
+
 	}
 
-	public static List<Edge<Long, NullValue>> getEdges () {
+
+
+	static List<Edge<Long, NullValue>> getBipartiteEdges () {
 		List<Edge<Long, NullValue>> edges = new ArrayList<>();
 		edges.add(new Edge<>(1L, 2L, NullValue.getInstance()));
 		edges.add(new Edge<>(1L, 3L, NullValue.getInstance()));
@@ -57,6 +76,17 @@ public class BipartitenessCheckTest extends AbstractTestBase {
 		edges.add(new Edge<>(4L, 5L, NullValue.getInstance()));
 		edges.add(new Edge<>(4L, 7L, NullValue.getInstance()));
 		edges.add(new Edge<>(4L, 9L, NullValue.getInstance()));
+		return edges;
+	}
+
+	static List<Edge<Long, NullValue>> getNonBipartiteEdges () {
+		List<Edge<Long, NullValue>> edges = new ArrayList<>();
+		edges.add(new Edge<>(1L, 2L, NullValue.getInstance()));
+		edges.add(new Edge<>(2L, 3L, NullValue.getInstance()));
+		edges.add(new Edge<>(3L, 1L, NullValue.getInstance()));
+		edges.add(new Edge<>(4L, 5L, NullValue.getInstance()));
+		edges.add(new Edge<>(5L, 7L, NullValue.getInstance()));
+		edges.add(new Edge<>(4L, 1L, NullValue.getInstance()));
 		return edges;
 	}
 

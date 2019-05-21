@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.test;
+/*package org.apache.flink.graph.streaming.example.test;
 
 import org.apache.flink.graph.streaming.example.DegreeDistribution;
 import org.apache.flink.graph.streaming.util.ExamplesTestData;
@@ -48,4 +48,4 @@ public class DegreeDistributionITCase extends StreamingProgramTestBase {
 		DegreeDistribution.main(new String[]{textPath, resultPath});
 		DegreeDistribution.main(new String[]{textPath2, resultPath2});
 	}
-}
+}*/

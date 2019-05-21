@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.test.operations;
+/*package org.apache.flink.graph.streaming.test.operations;
 
 import java.util.concurrent.TimeUnit;
 
@@ -266,4 +266,4 @@ public class TestSlice extends StreamingProgramTestBase {
 			}
 		}
 	}
-}
+}*/

@@ -7,26 +7,51 @@ import org.apache.flink.graph.streaming.library.ConnectedComponents;
 import org.apache.flink.graph.streaming.summaries.DisjointSet;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.streaming.api.functions.sink.SinkFunction;
+import org.apache.flink.test.util.AbstractTestBase;
 import org.apache.flink.types.NullValue;
 import org.junit.Assert;
+import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-public class ConnectedComponentsTest extends StreamingProgramTestBase {
-	public static final String Connected_RESULT =
-			"1, 2, 3, 5\n" + "6, 7\n" +
-					"9 8\n";
-	protected String resultPath;
+import static org.junit.Assert.assertEquals;
+
+public class ConnectedComponentsTest extends AbstractTestBase {
+
+    @Test
+    public void test() throws Exception {
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(1); //needed to ensure total ordering for windows
+        CollectSink.values.clear();
+
+        DataStream<Edge<Long, NullValue>> edges = getGraphStream(env);
+        GraphStream<Long, NullValue, NullValue> graph = new SimpleEdgeStream<>(edges, env);
+
+        graph
+            .aggregate(new ConnectedComponents<>(5))
+            .addSink(new CollectSink());
+
+        env.execute("Streaming Connected Components Check");
+
+        // verify the results
+        String expectedResultStr = "1, 2, 3, 5\n" + "6, 7\n" + "8, 9\n";
+        String[] result = parser(CollectSink.values);
+        String[] expected = expectedResultStr.isEmpty() ? new String[0] : expectedResultStr.split("\n");
+
+        assertEquals("Different number of lines in expected and obtained result.", expected.length, result.length);
+        Assert.assertArrayEquals("Different connected components.", expected, result);
+    }
 
 	@SuppressWarnings("serial")
 	private static DataStream<Edge<Long, NullValue>> getGraphStream(StreamExecutionEnvironment env) {
 		return env.fromCollection(getEdges());
 	}
 
-	public static final List<Edge<Long, NullValue>> getEdges() {
+	public static List<Edge<Long, NullValue>> getEdges() {
 		List<Edge<Long, NullValue>> edges = new ArrayList<>();
 		edges.add(new Edge<>(1L, 2L, NullValue.getInstance()));
 		edges.add(new Edge<>(1L, 3L, NullValue.getInstance()));
@@ -37,7 +62,7 @@ public class ConnectedComponentsTest extends StreamingProgramTestBase {
 		return edges;
 	}
 
-	public static final String[] parser(ArrayList<String> list) {
+	static String[] parser(List<String> list) {
 		int s = list.size();
 		String r = list.get(s - 1);  // to get the final combine result which is stored at the end of result
 		String t;
@@ -55,32 +80,15 @@ public class ConnectedComponentsTest extends StreamingProgramTestBase {
 		return result;
 	}
 
-	@Override
-	protected void preSubmit() throws Exception {
-		setParallelism(1); //needed to ensure total ordering for windows
-		resultPath = getTempDirPath("output");
-	}
+    // a testing sink
+    public static final class CollectSink implements SinkFunction<DisjointSet<Long>> {
 
-	@Override
-	protected void postSubmit() throws Exception {
-		String expectedResultStr = Connected_RESULT;
-		String[] excludePrefixes = new String[0];
-		ArrayList<String> list = new ArrayList<String>();
-		readAllResultLines(list, resultPath, excludePrefixes, false);
-		String[] result = parser(list);
-		String[] expected = expectedResultStr.isEmpty() ? new String[0] : expectedResultStr.split("\n");
-		Arrays.sort(expected);
-		Assert.assertEquals("Different number of lines in expected and obtained result.", expected.length, result.length);
-	}
+        static final List<String> values = new ArrayList<>();
 
-	@Override
-	protected void testProgram() throws Exception {
-		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-		DataStream<Edge<Long, NullValue>> edges = getGraphStream(env);
-		GraphStream<Long, NullValue, NullValue> graph = new SimpleEdgeStream<>(edges, env);
-		DataStream<DisjointSet<Long>> cc = graph.aggregate(new ConnectedComponents<Long, NullValue>(5));
-		cc.writeAsText(resultPath);
-		env.execute("Streaming Connected ComponentsCheck");
-	}
+        @Override
+        public void invoke(DisjointSet value, Context context) throws Exception {
+            values.add(value.toString());
+        }
+    }
 }
 

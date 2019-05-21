@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.example.test;
+/*package org.apache.flink.graph.streaming.example.test;
 
 import org.apache.flink.graph.streaming.example.WindowTriangles;
 import org.apache.flink.graph.streaming.util.ExamplesTestData;
@@ -42,4 +42,4 @@ public class WindowTrianglesITCase extends StreamingProgramTestBase {
 	protected void testProgram() throws Exception {
 		WindowTriangles.main(new String[]{textPath, resultPath, "400"});
 	}
-}
+}*/

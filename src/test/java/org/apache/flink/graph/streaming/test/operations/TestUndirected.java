@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.test.operations;
+/*package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.streaming.GraphStream;
@@ -52,7 +52,7 @@ public class TestUndirected extends StreamingProgramTestBase {
 		     /*
 		 * Test undirected() with the sample graph
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
@@ -74,4 +74,4 @@ public class TestUndirected extends StreamingProgramTestBase {
 				"5,1,51\n" +
 				"1,5,51\n";
 	}
-}
+}*/

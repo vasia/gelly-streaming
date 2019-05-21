@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/*
 package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.api.common.functions.MapFunction;
@@ -58,7 +58,7 @@ public class TestNumberOfEntities extends StreamingProgramTestBase {
 		/*
 		 * Test numberOfVertices() with the sample graph
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
@@ -81,7 +81,7 @@ public class TestNumberOfEntities extends StreamingProgramTestBase {
 		/*
 		 * Test numberOfEdges() with the sample graph
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
@@ -101,4 +101,4 @@ public class TestNumberOfEntities extends StreamingProgramTestBase {
 				"6\n" +
 				"7\n";
 	}
-}
+}*/

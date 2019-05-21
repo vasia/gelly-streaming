@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.test.operations;
+/*package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
@@ -60,7 +60,7 @@ public class TestMapEdges extends StreamingProgramTestBase {
 		/*
 		 * Test mapEdges() keeping the same edge types
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
@@ -88,9 +88,9 @@ public class TestMapEdges extends StreamingProgramTestBase {
 		/*
 		 * Test mapEdges() converting the edge value type to tuple
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+//		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
+/*		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
 		GraphStream<Long, NullValue, Tuple2<Long, Long>> mappedGraph = graph.mapEdges(new ToTuple2Mapper());
 
@@ -116,7 +116,7 @@ public class TestMapEdges extends StreamingProgramTestBase {
 		/*
 		 * Test mapEdges() where two maps are chained together
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
@@ -134,4 +134,4 @@ public class TestMapEdges extends StreamingProgramTestBase {
 				"4,5,(46,47)\n" +
 				"5,1,(52,53)\n";
 	}
-}
+}*/

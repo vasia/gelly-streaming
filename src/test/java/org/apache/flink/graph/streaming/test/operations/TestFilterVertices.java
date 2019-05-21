@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.test.operations;
+/*package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.core.fs.FileSystem;
@@ -59,7 +59,7 @@ public class TestFilterVertices extends StreamingProgramTestBase {
 		/*
 		 * Test filterVertices() with a simple filter
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
@@ -85,7 +85,7 @@ public class TestFilterVertices extends StreamingProgramTestBase {
 		/*
 		 * Test filterVertices() with a filter that constantly returns true
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
@@ -114,7 +114,7 @@ public class TestFilterVertices extends StreamingProgramTestBase {
 		/*
 		 * Test filterVertices() with a filter that constantly returns false
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
@@ -133,3 +133,4 @@ public class TestFilterVertices extends StreamingProgramTestBase {
 		}
 	}
 }
+*/

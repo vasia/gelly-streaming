@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.test.operations;
+/*package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
@@ -54,7 +54,7 @@ public class TestUnion extends StreamingProgramTestBase {
 		     /*
 		 * Test union() with two simple graphs
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		List<Edge<Long, Long>> edgesA = new ArrayList<>();
 		edgesA.add(new Edge<>(1L, 2L, 12L));
@@ -86,4 +86,4 @@ public class TestUnion extends StreamingProgramTestBase {
 				"5,1,51\n";
 	}
 
-}
+}*/

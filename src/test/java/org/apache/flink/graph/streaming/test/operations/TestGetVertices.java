@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/*
 package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
@@ -51,7 +51,7 @@ public class TestGetVertices extends StreamingProgramTestBase {
 		/*
 		 * Test getVertices() with the sample graph
 	     */
-		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
 
@@ -65,3 +65,4 @@ public class TestGetVertices extends StreamingProgramTestBase {
 				"5,(null)\n";
 	}
 }
+*/

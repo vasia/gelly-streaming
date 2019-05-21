@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.flink.graph.streaming.test.operations;
+/*package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
@@ -54,7 +54,7 @@ public class TestDistinct extends StreamingProgramTestBase {
                  /*
          * Test distinct() with the sample graph duplicated
 	     */
-        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+ /*       final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         List<Edge<Long, Long>> edges = GraphStreamTestUtils.getLongLongEdges();
         edges.addAll(GraphStreamTestUtils.getLongLongEdges());
@@ -74,4 +74,4 @@ public class TestDistinct extends StreamingProgramTestBase {
                 "4,5,45\n" +
                 "5,1,51\n";
     }
-}
+}*/

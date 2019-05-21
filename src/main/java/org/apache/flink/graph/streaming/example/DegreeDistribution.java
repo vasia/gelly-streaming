@@ -43,11 +43,12 @@ public class DegreeDistribution {
 
 	public static void main(String[] args) throws Exception {
 
-		if (!parseParameters(args)) {
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		if (!parseParameters(args, env)) {
 			return;
 		}
 
-		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 		DataStream<Tuple3<Integer, Integer, EventType>> edges = getGraphStream(env);
 		// 1. emit (vertexID, 1) or (vertexID, -1) for addition or deletion
 		edges.flatMap(new EmitVerticesWithChange())
@@ -139,22 +140,26 @@ public class DegreeDistribution {
 	private static String edgeInputPath = null;
 	private static String resultPath = null;
 
-	private static boolean parseParameters(String[] args) {
+	private static boolean parseParameters(String[] args, StreamExecutionEnvironment env) {
 
 		if (args.length > 0) {
-			if (args.length != 2) {
-				System.err.println("Usage: DegreeDistribution <input edges path> <result path>");
+			if (args.length < 2) {
+				System.err.println("Usage: DegreeDistribution <input edges path> <result path> <parallelism (optional)>");
 				return false;
 			}
 
 			fileOutput = true;
 			edgeInputPath = args[0];
 			resultPath = args[1];
+			if (args.length > 2) {
+				env.setParallelism(Integer.parseInt(args[2]));
+			}
+
 		} else {
 			System.out.println("Executing DegreeDistribution example with default parameters and built-in default data.");
 			System.out.println("  Provide parameters to read input data from files.");
 			System.out.println("  See the documentation for the correct format of input files.");
-			System.out.println("  Usage: DegreeDistribution <input edges path> <result path>");
+			System.out.println("  Usage: DegreeDistribution <input edges path> <result path> <parallelism (optional)>");
 		}
 		return true;
 	}

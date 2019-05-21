@@ -15,37 +15,28 @@
  * limitations under the License.
  */
 
-/*package org.apache.flink.graph.streaming.example.test;
+package org.apache.flink.graph.streaming.example.test;
 
 import org.apache.flink.graph.streaming.example.DegreeDistribution;
 import org.apache.flink.graph.streaming.util.ExamplesTestData;
-import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.test.util.AbstractTestBase;
+import org.junit.Test;
 
-public class DegreeDistributionITCase extends StreamingProgramTestBase {
-	
-	protected String textPath;
-	protected String resultPath;
-	protected String textPath2;
-	protected String resultPath2;
+public class DegreeDistributionITCase extends AbstractTestBase {
 
-	@Override
-	protected void preSubmit() throws Exception {
-		setParallelism(1);
-		textPath = createTempFile("edges.txt", ExamplesTestData.DEGREES_DATA);
-		resultPath = getTempDirPath("result");
-		textPath2 = createTempFile("edges2.txt", ExamplesTestData.DEGREES_DATA_ZERO);
-		resultPath2 = getTempDirPath("result2");
-	}
+    @Test
+    public void test() throws Exception {
 
-	@Override
-	protected void postSubmit() throws Exception {
-		compareResultsByLinesInMemory(ExamplesTestData.DEGREES_RESULT, resultPath);
-		compareResultsByLinesInMemory(ExamplesTestData.DEGREES_RESULT_ZERO, resultPath2);
-	}
+        final String textPath = createTempFile("edges.txt", ExamplesTestData.DEGREES_DATA);
+        final String resultPath = getTempDirPath("result");
+        final String textPath2 = createTempFile("edges2.txt", ExamplesTestData.DEGREES_DATA_ZERO);
+        final String resultPath2 = getTempDirPath("result2");
 
-	@Override
-	protected void testProgram() throws Exception {
-		DegreeDistribution.main(new String[]{textPath, resultPath});
-		DegreeDistribution.main(new String[]{textPath2, resultPath2});
-	}
-}*/
+        DegreeDistribution.main(new String[]{textPath, resultPath, "1"});
+        DegreeDistribution.main(new String[]{textPath2, resultPath2, "1"});
+
+        compareResultsByLinesInMemory(ExamplesTestData.DEGREES_RESULT, resultPath);
+        compareResultsByLinesInMemory(ExamplesTestData.DEGREES_RESULT_ZERO, resultPath2);
+    }
+}

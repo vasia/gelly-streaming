@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-/*package org.apache.flink.graph.streaming.test.operations;
+package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.Edge;
@@ -24,37 +24,28 @@ import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.test.util.AbstractTestBase;
 import org.apache.flink.types.NullValue;
-import org.junit.Rule;
-import org.junit.rules.TemporaryFolder;
+import org.junit.Test;
 
 import java.util.List;
 
-public class TestDistinct extends StreamingProgramTestBase {
+public class TestDistinct extends AbstractTestBase {
 
-    private String resultPath;
-    private String expectedResult;
-    
-    @Rule
-    public TemporaryFolder tempFolder = new TemporaryFolder();
+    @Test
+    public void test() throws Exception {
 
-    @Override
-    protected void preSubmit() throws Exception {
-        resultPath = tempFolder.newFile().toURI().toString();
-    }
+        final String expectedResult = "1,2,12\n" +
+                                        "1,3,13\n" +
+                                        "2,3,23\n" +
+                                        "3,4,34\n" +
+                                        "3,5,35\n" +
+                                        "4,5,45\n" +
+                                        "5,1,51\n";
 
-    @Override
-    protected void postSubmit() throws Exception {
-        compareResultsByLinesInMemory(expectedResult, resultPath);
-    }
+        final String resultPath = getTempDirPath("result");
 
-    @Override
-    protected void testProgram() throws Exception {
-                 /*
-         * Test distinct() with the sample graph duplicated
-	     */
- /*       final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         List<Edge<Long, Long>> edges = GraphStreamTestUtils.getLongLongEdges();
         edges.addAll(GraphStreamTestUtils.getLongLongEdges());
@@ -66,12 +57,7 @@ public class TestDistinct extends StreamingProgramTestBase {
                 .writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 
         env.execute();
-        expectedResult = "1,2,12\n" +
-                "1,3,13\n" +
-                "2,3,23\n" +
-                "3,4,34\n" +
-                "3,5,35\n" +
-                "4,5,45\n" +
-                "5,1,51\n";
+
+        compareResultsByLinesInMemory(expectedResult, resultPath);
     }
-}*/
+}

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-/*package org.apache.flink.graph.streaming.test.operations;
+package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.core.fs.FileSystem;
@@ -25,105 +25,90 @@ import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.test.util.AbstractTestBase;
 import org.apache.flink.types.NullValue;
-import org.junit.Rule;
-import org.junit.rules.TemporaryFolder;
+import org.junit.Test;
 
-public class TestFilterVertices extends StreamingProgramTestBase {
+public class TestFilterVertices extends AbstractTestBase {
 
-	private String resultPath;
-	private String expectedResult;
-
-	@Rule
-	public TemporaryFolder tempFolder = new TemporaryFolder();
-
-	@Override
-	protected void testProgram() throws Exception {
-		testWithSimpleFilter();
-		testWithDiscardFilter();
-		testWithEmptyFilter();
-	}
-
-	@Override
-	protected void preSubmit() throws Exception {
-		resultPath = tempFolder.newFile().toURI().toString();
-	}
-
-	@Override
-	protected void postSubmit() throws Exception {
-		compareResultsByLinesInMemory(expectedResult, resultPath);
-	}
-
+    @Test
 	public void testWithSimpleFilter() throws Exception {
 		/*
 		 * Test filterVertices() with a simple filter
 	     */
-/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        final String resultPath = getTempDirPath("result");
+        final String expectedResult = "2,3,23\n" +
+                "3,4,34\n" +
+                "3,5,35\n" +
+                "4,5,45\n";
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
-
-		graph = graph.filterVertices(new LowVertexKeyFilter());
-
-		graph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		graph.filterVertices(new LowVertexKeyFilter())
+                .getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
-		expectedResult = "2,3,23\n" +
-				"3,4,34\n" +
-				"3,5,35\n" +
-				"4,5,45\n";
+
+        compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
 
-	private static final class LowVertexKeyFilter implements FilterFunction<Vertex<Long, NullValue>> {
-
-		@Override
-		public boolean filter(Vertex<Long, NullValue> vertex) throws Exception {
-			return vertex.getId() > 1;
-		}
-	}
-
+    @Test
 	public void testWithEmptyFilter() throws Exception {
 		/*
 		 * Test filterVertices() with a filter that constantly returns true
 	     */
-/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        final String resultPath = getTempDirPath("result");
+        final String expectedResult = "1,2,12\n" +
+                "1,3,13\n" +
+                "2,3,23\n" +
+                "3,4,34\n" +
+                "3,5,35\n" +
+                "4,5,45\n" +
+                "5,1,51\n";
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
-
-		graph = graph.filterVertices(new EmptyFilter());
-
-		graph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		graph.filterVertices(new EmptyFilter())
+                .getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
-		expectedResult = "1,2,12\n" +
-				"1,3,13\n" +
-				"2,3,23\n" +
-				"3,4,34\n" +
-				"3,5,35\n" +
-				"4,5,45\n" +
-				"5,1,51\n";
-	}
 
-	private static final class EmptyFilter implements FilterFunction<Vertex<Long, NullValue>> {
+        compareResultsByLinesInMemory(expectedResult, resultPath);
+    }
 
-		@Override
-		public boolean filter(Vertex<Long, NullValue> vertex) throws Exception {
-			return true;
-		}
-	}
-
+    @Test
 	public void testWithDiscardFilter() throws Exception {
 		/*
 		 * Test filterVertices() with a filter that constantly returns false
 	     */
-/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        final String resultPath = getTempDirPath("result");
+        final String expectedResult = "";
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
-
-		graph = graph.filterVertices(new DiscardFilter());
-
-		graph.getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
+		graph.filterVertices(new DiscardFilter())
+                .getEdges().writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
 		env.execute();
-		expectedResult = "";
-	}
+
+        compareResultsByLinesInMemory(expectedResult, resultPath);
+    }
+
+    private static final class LowVertexKeyFilter implements FilterFunction<Vertex<Long, NullValue>> {
+
+        @Override
+        public boolean filter(Vertex<Long, NullValue> vertex) throws Exception {
+            return vertex.getId() > 1;
+        }
+    }
+
+    private static final class EmptyFilter implements FilterFunction<Vertex<Long, NullValue>> {
+
+        @Override
+        public boolean filter(Vertex<Long, NullValue> vertex) throws Exception {
+            return true;
+        }
+    }
 
 	private static final class DiscardFilter implements FilterFunction<Vertex<Long, NullValue>> {
 
@@ -133,4 +118,3 @@ public class TestFilterVertices extends StreamingProgramTestBase {
 		}
 	}
 }
-*/

@@ -18,13 +18,8 @@
 
 package org.apache.flink.graph.streaming.summaries;
 
-import org.apache.flink.hadoop.shaded.com.google.common.collect.Lists;
-
 import java.io.Serializable;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 
 public class DisjointSet<R extends Serializable> implements Serializable {
@@ -142,9 +137,11 @@ public class DisjointSet<R extends Serializable> implements Serializable {
         for (R vertex : getMatches().keySet()) {
             R parent = find(vertex);
             if (!comps.containsKey(parent)) {
-                comps.put(parent, Lists.newArrayList(vertex));
+                List<R> vertices = new ArrayList<>();
+                vertices.add(vertex);
+                comps.put(parent, vertices);
             } else {
-                List cc = comps.get(parent);
+                List<R> cc = comps.get(parent);
                 cc.add(vertex);
                 comps.put(parent, cc);
             }

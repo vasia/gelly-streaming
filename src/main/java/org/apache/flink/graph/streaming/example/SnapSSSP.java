@@ -190,6 +190,8 @@ public class SnapSSSP implements ProgramDescription{
 					ctx.emitWatermark(new Watermark(curTime - 1));
 				}
 			}
+			// trigger the last window
+			ctx.emitWatermark(new Watermark(Long.MAX_VALUE));
 		}
 
 		@Override

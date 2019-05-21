@@ -49,11 +49,11 @@ public class WindowTriangles implements ProgramDescription {
 
 	public static void main(String[] args) throws Exception {
 
-		if(!parseParameters(args)) {
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+
+		if (!parseParameters(args, env)) {
 			return;
 		}
-
-        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
         SimpleEdgeStream<Long, NullValue> edges = getGraphStream(env);
 
@@ -143,12 +143,12 @@ public class WindowTriangles implements ProgramDescription {
 	private static String outputPath = null;
 	private static Time windowTime = Time.of(300, TimeUnit.MILLISECONDS);
 
-	private static boolean parseParameters(String[] args) {
+	private static boolean parseParameters(String[] args, StreamExecutionEnvironment env) {
 
 		if(args.length > 0) {
-			if(args.length != 3) {
+			if(args.length < 3) {
 				System.err.println("Usage: WindowTriangles <input edges path> <output path>"
-						+ " <window time (ms)>");
+						+ " <window time (ms)> <parallelism (optional)>");
 				return false;
 			}
 
@@ -156,12 +156,16 @@ public class WindowTriangles implements ProgramDescription {
 			edgeInputPath = args[0];
 			outputPath = args[1];
 			windowTime = Time.of(Long.parseLong(args[2]), TimeUnit.MILLISECONDS);
+			if (args.length > 3) {
+				env.setParallelism(Integer.parseInt(args[3]));
+			}
+
 		} else {
 			System.out.println("Executing WindowTriangles example with default parameters and built-in default data.");
 			System.out.println("  Provide parameters to read input data from files.");
 			System.out.println("  See the documentation for the correct format of input files.");
 			System.out.println("  Usage: WindowTriangles <input edges path> <output path>"
-					+ " <window time (ms)>");
+					+ " <window time (ms)> <parallelism (optional)>");
 		}
 		return true;
 	}
@@ -196,13 +200,6 @@ public class WindowTriangles implements ProgramDescription {
                 }), new EdgeValueTimestampExtractor(), env).mapEdges(new RemoveEdgeValue()); 
     }
 
-    @SuppressWarnings("serial")
-	public static final class IdentityFold implements FoldFunction<Tuple2<Long, Long>, Tuple2<Long, Long>> {
-		public Tuple2<Long, Long> fold(Tuple2<Long, Long> accumulator,
-				Tuple2<Long, Long> value) throws Exception {
-			return value;
-		}
-    }
 
     @SuppressWarnings("serial")
 	public static final class EdgeValueTimestampExtractor extends AscendingTimestampExtractor<Edge<Long, Long>> {

@@ -15,31 +15,21 @@
  * limitations under the License.
  */
 
-/*package org.apache.flink.graph.streaming.example.test;
+package org.apache.flink.graph.streaming.example.test;
 
 import org.apache.flink.graph.streaming.example.WindowTriangles;
 import org.apache.flink.graph.streaming.util.ExamplesTestData;
-import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.test.util.AbstractTestBase;
+import org.junit.Test;
 
-public class WindowTrianglesITCase extends StreamingProgramTestBase {
-	
-	protected String textPath;
-	protected String resultPath;
+public class WindowTrianglesITCase extends AbstractTestBase {
 
-	@Override
-	protected void preSubmit() throws Exception {
-		setParallelism(1); //needed to ensure total ordering for windows
-		textPath = createTempFile("edges.txt", ExamplesTestData.TRIANGLES_DATA);
-		resultPath = getTempDirPath("result");
-	}
+	@Test
+	public void test() throws Exception {
+		final String resultPath = getTempDirPath("result");
+		final String textPath = createTempFile("edges.txt", ExamplesTestData.TRIANGLES_DATA);
 
-	@Override
-	protected void postSubmit() throws Exception {
+		WindowTriangles.main(new String[]{textPath, resultPath, "400", "1"});
 		compareResultsByLinesInMemory(ExamplesTestData.TRIANGLES_RESULT, resultPath);
 	}
-
-	@Override
-	protected void testProgram() throws Exception {
-		WindowTriangles.main(new String[]{textPath, resultPath, "400"});
-	}
-}*/
+}

@@ -16,55 +16,38 @@
  * limitations under the License.
  */
 
-/*package org.apache.flink.graph.streaming.test.operations;
+package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.test.util.AbstractTestBase;
 import org.apache.flink.types.NullValue;
-import org.junit.Rule;
-import org.junit.rules.TemporaryFolder;
+import org.junit.Test;
 
-public class TestReverse extends StreamingProgramTestBase {
+public class TestReverse extends AbstractTestBase {
 
-	private String resultPath;
-	private String expectedResult;
-
-	@Rule
-	public TemporaryFolder tempFolder = new TemporaryFolder();
-
-	@Override
-	protected void preSubmit() throws Exception {
-		resultPath = tempFolder.newFile().toURI().toString();
-	}
-
-	@Override
-	protected void postSubmit() throws Exception {
-		compareResultsByLinesInMemory(expectedResult, resultPath);
-	}
-
-	@Override
-	protected void testProgram() throws Exception {
-		   	/*
+	@Test
+	public void testProgram() throws Exception {
+        /*
 		 * Test reverse() with the sample graph
 	     */
-/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        final String resultPath = getTempDirPath("result");
+        final String expectedResult = "2,1,12\n" +
+                "3,1,13\n" +
+                "3,2,23\n" +
+                "4,3,34\n" +
+                "5,3,35\n" +
+                "5,4,45\n" +
+                "1,5,51\n";
 
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
-
 		graph.reverse().getEdges()
 				.writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
-
 		env.execute();
-		expectedResult = "2,1,12\n" +
-				"3,1,13\n" +
-				"3,2,23\n" +
-				"4,3,34\n" +
-				"5,3,35\n" +
-				"5,4,45\n" +
-				"1,5,51\n";
+        compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
-}*/
+}

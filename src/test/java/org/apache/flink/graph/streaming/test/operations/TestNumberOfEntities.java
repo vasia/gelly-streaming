@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/*
+
 package org.apache.flink.graph.streaming.test.operations;
 
 import org.apache.flink.api.common.functions.MapFunction;
@@ -25,80 +25,61 @@ import org.apache.flink.graph.streaming.GraphStream;
 import org.apache.flink.graph.streaming.SimpleEdgeStream;
 import org.apache.flink.graph.streaming.test.GraphStreamTestUtils;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.util.StreamingProgramTestBase;
+import org.apache.flink.test.util.AbstractTestBase;
 import org.apache.flink.types.NullValue;
-import org.junit.Rule;
-import org.junit.rules.TemporaryFolder;
+import org.junit.Test;
 
-public class TestNumberOfEntities extends StreamingProgramTestBase {
+public class TestNumberOfEntities extends AbstractTestBase {
 
-	private String resultPath;
-	private String expectedResult;
-
-	@Rule
-	public TemporaryFolder tempFolder = new TemporaryFolder();
-
-	@Override
-	protected void preSubmit() throws Exception {
-		resultPath = tempFolder.newFile().toURI().toString();
-	}
-
-	@Override
-	protected void postSubmit() throws Exception {
-		compareResultsByLinesInMemory(expectedResult, resultPath);
-	}
-
-	@Override
-	protected void testProgram() throws Exception {
-		testNumberOfEdges();
-		testNumberOfVertices();
-	}
-
+    @Test
 	public void testNumberOfVertices() throws Exception {
 		/*
 		 * Test numberOfVertices() with the sample graph
 	     */
-/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        final String resultPath = getTempDirPath("result");
+        final String expectedResult = "1\n" +
+                "2\n" +
+                "3\n" +
+                "4\n" +
+                "5\n";
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
-
 		graph.numberOfVertices().map(new MapFunction<Long, Tuple1<Long>>() {
 			@Override
 			public Tuple1<Long> map(Long value) throws Exception {
 				return new Tuple1<>(value);
 			}
 		}).writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
-
 		env.execute();
-		expectedResult = "1\n" +
-				"2\n" +
-				"3\n" +
-				"4\n" +
-				"5\n";
+        compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
 
+	@Test
 	public void testNumberOfEdges() throws Exception {
 		/*
 		 * Test numberOfEdges() with the sample graph
 	     */
-/*		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        final String resultPath = getTempDirPath("result");
+        final String expectedResult = "1\n" +
+                "2\n" +
+                "3\n" +
+                "4\n" +
+                "5\n" +
+                "6\n" +
+                "7\n";
+
+		final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
 		GraphStream<Long, NullValue, Long> graph = new SimpleEdgeStream<>(GraphStreamTestUtils.getLongLongEdgeDataStream(env), env);
-
 		graph.numberOfEdges().map(new MapFunction<Long, Tuple1<Long>>() {
 			@Override
 			public Tuple1<Long> map(Long value) throws Exception {
 				return new Tuple1<>(value);
 			}
 		}).writeAsCsv(resultPath, FileSystem.WriteMode.OVERWRITE);
-
 		env.execute();
-		expectedResult = "1\n" +
-				"2\n" +
-				"3\n" +
-				"4\n" +
-				"5\n" +
-				"6\n" +
-				"7\n";
+        compareResultsByLinesInMemory(expectedResult, resultPath);
 	}
-}*/
+}

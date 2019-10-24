@@ -130,10 +130,11 @@ public class IterativeConnectedComponents implements ProgramDescription {
 				for (long v: vertices) {
 					out.collect(new Tuple2<Long, Long>(v, toAdd));
 				}
-				vertices.add(toAdd);
+				vertices.add(componentId);
 				components.put(toAdd, vertices);
 			}
 			else {
+				vertices.add(toAdd);
 				components.put(componentId, vertices);
 				out.collect(new Tuple2<Long, Long>(toAdd, componentId));
 			}
